@@ -8,7 +8,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -17,7 +16,6 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.viewinterop.AndroidView
 import java.lang.reflect.Method
-import kotlin.math.roundToInt
 
 /**
  * Small cached bridge around HyperOS/MIUI's per-View pass-window blur APIs.
@@ -96,14 +94,25 @@ private class MiuiPassBlurBackdropView(context: Context) : View(context) {
     private var blurActive = false
     private var attempts = 0
     private var unsupportedLogged = false
+    private var activeLogged = false
+    private var rejectedLogged = false
 
     private val retry = object : Runnable {
         override fun run() {
             if (!isAttachedToWindow || blurActive || attempts >= MAX_ATTACH_RETRIES) return
             attempts++
             blurActive = MiuiPassBlurBridge.apply(this@MiuiPassBlurBackdropView, blurRadiusPx)
+            if (blurActive && !activeLogged) {
+                activeLogged = true
+                Log.d(TAG, "MIUI pass-window blur active radius=$blurRadiusPx")
+            }
             invalidate()
-            if (!blurActive && attempts < MAX_ATTACH_RETRIES) postOnAnimation(this)
+            if (!blurActive && attempts < MAX_ATTACH_RETRIES) {
+                postOnAnimation(this)
+            } else if (!blurActive && !rejectedLogged) {
+                rejectedLogged = true
+                Log.d(TAG, "MIUI pass-window blur rejected after $attempts attach frames; using translucent fallback")
+            }
         }
     }
 
@@ -184,7 +193,7 @@ internal fun LiquidGlassSurface(
     content: @Composable BoxScope.() -> Unit,
 ) {
     val tint = fallbackColor.copy(
-        alpha = activeTintAlpha.coerceIn(0f, fallbackColor.alpha.coerceAtLeast(activeTintAlpha)),
+        alpha = activeTintAlpha.coerceIn(0f, 1f),
     )
     Box(
         modifier = modifier.clip(shape),
