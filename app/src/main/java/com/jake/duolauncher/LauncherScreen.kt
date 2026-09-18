@@ -574,13 +574,16 @@ fun LauncherScreen(
                             if (contentHeight < 500.dp) 0f else 23f).coerceAtLeast(0f)
                     },
                 compact = contentHeight < 500.dp, iconSize = dockIconSize(geometry.iconSize).dp)
-            Surface(Modifier.align(Alignment.TopEnd).padding(end = 12.dp).offset(y = geometry.dockTop.dp)
-                .width(preset.dockWidth.dp).height(geometry.dockHeight.dp).graphicsLayer {
-                    // Composite the stationary dock independently of the shared pager layer.
-                    compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen
-                }.testTag("dock"),
-                shape = RoundedCornerShape(30.dp), color = Glass.copy(alpha = .32f),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = .3f))) {
+            LiquidGlassSurface(
+                Modifier.align(Alignment.TopEnd).padding(end = 12.dp).offset(y = geometry.dockTop.dp)
+                    .width(preset.dockWidth.dp).height(geometry.dockHeight.dp).graphicsLayer {
+                        // Composite the stationary dock independently of the shared pager layer.
+                        compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen
+                    }.testTag("dock"),
+                shape = RoundedCornerShape(30.dp),
+                fallbackColor = Glass.copy(alpha = .32f),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = .3f)),
+            ) {
                 Column(Modifier.padding(vertical = 8.dp).verticalScroll(dockScroll)) {
                     DockAppColumn(state.dock, previewLayout.dock, appsById, geometry.dockRowHeight,
                         dockIconSize(geometry.iconSize), drag, insertionTarget,
@@ -1687,9 +1690,13 @@ private fun AppTile(app: AppEntry, size: Float, labels: Boolean, modifier: Modif
 
 @Composable
 private fun GlassCard(modifier: Modifier = Modifier, onClick: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
-    Surface(modifier.fillMaxSize().clip(RoundedCornerShape(24.dp)).clickable(onClick = onClick),
-        color = Glass.copy(alpha = .24f), shape = RoundedCornerShape(24.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = .18f))) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.SpaceBetween, content = content)
+    LiquidGlassSurface(
+        modifier.fillMaxSize().clickable(onClick = onClick),
+        shape = RoundedCornerShape(24.dp),
+        fallbackColor = Glass.copy(alpha = .24f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = .18f)),
+    ) {
+        Column(Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.SpaceBetween, content = content)
     }
 }
 
