@@ -46,16 +46,19 @@ internal fun FolderPanel(
         )
         .imePadding().testTag("folder-panel"),
         contentAlignment = Alignment.Center) {
-        Surface(Modifier.fillMaxWidth(.9f).fillMaxHeight(.82f).heightIn(min = 260.dp, max = 620.dp)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = {},
-            )
-            .testTag("folder-panel-content"),
-            color = Glass.copy(alpha = .97f), shape = RoundedCornerShape(30.dp),
-            border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = .6f))) {
-            Column(Modifier.padding(18.dp)) {
+        LiquidGlassSurface(
+            Modifier.fillMaxWidth(.9f).fillMaxHeight(.82f).heightIn(min = 260.dp, max = 620.dp)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = {},
+                )
+                .testTag("folder-panel-content"),
+            fallbackColor = Glass.copy(alpha = .97f),
+            shape = RoundedCornerShape(30.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = .6f)),
+        ) {
+            Column(Modifier.fillMaxSize().padding(18.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(title, { title = it }, Modifier.weight(1f).testTag("folder-name"),
                         singleLine = true, label = { Text("Folder name") })
