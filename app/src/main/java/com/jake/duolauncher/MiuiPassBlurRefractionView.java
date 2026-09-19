@@ -750,6 +750,7 @@ final class MiuiPassBlurRefractionView extends TextureView
             } else {
                 target = new SurfaceControl.Builder()
                         .setName("DuoLauncherMIUIGlass-PassBlurCapture")
+                        .setHidden(false)
                         .build();
                 ownsTarget = true;
 
@@ -758,7 +759,6 @@ final class MiuiPassBlurRefractionView extends TextureView
                     target.release();
                     return null;
                 }
-                parentTransaction.show(target);
                 parentTransaction.apply();
                 Log.i(TAG, "PassBlur capture node attached through public AttachedSurfaceControl");
             }
