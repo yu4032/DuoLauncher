@@ -235,9 +235,10 @@ final class MiuiPassBlurRefractionView extends TextureView
                     entry = new AuthorityEntry(priority, ++nextSequence, requested);
                     ENTRIES.put(view, entry);
                 } else {
+                    boolean becameRequested = !entry.requested && requested;
                     entry.priority = priority;
                     entry.requested = requested;
-                    if (requested) entry.sequence = ++nextSequence;
+                    if (becameRequested) entry.sequence = ++nextSequence;
                 }
                 if (!requested) ENTRIES.remove(view);
                 oldOwner = ownerRef.get();
