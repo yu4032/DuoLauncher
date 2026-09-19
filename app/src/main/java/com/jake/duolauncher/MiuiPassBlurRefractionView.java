@@ -309,11 +309,13 @@ final class MiuiPassBlurRefractionView extends TextureView
         final Method apply;
         final Method close;
         final float scale;
+        final boolean ownsTarget;
         boolean bound = true;
 
         Binding(SurfaceControl captureNode, Class<?> transactionClass,
                 Method setPassBlurSurface, Method setUpdateTextureFlag,
-                Method setMiBlurWinExc, Method apply, Method close, float scale) {
+                Method setMiBlurWinExc, Method apply, Method close, float scale,
+                boolean ownsTarget) {
             this.captureNode = captureNode;
             this.transactionClass = transactionClass;
             this.setPassBlurSurface = setPassBlurSurface;
@@ -322,6 +324,7 @@ final class MiuiPassBlurRefractionView extends TextureView
             this.apply = apply;
             this.close = close;
             this.scale = scale;
+            this.ownsTarget = ownsTarget;
         }
     }
 
@@ -380,6 +383,7 @@ final class MiuiPassBlurRefractionView extends TextureView
     private volatile boolean producerFrameSeen;
     private volatile boolean presentedFrameSeen;
     private int noFrameRecoveryAttempts;
+    private boolean preferRawRootTarget;
 
     MiuiPassBlurRefractionView(Context context) {
         super(context);
@@ -503,6 +507,8 @@ final class MiuiPassBlurRefractionView extends TextureView
         authorityOwner = owner;
         if (owner && requested) {
             bindAttempts = 0;
+            noFrameRecoveryAttempts = 0;
+            preferRawRootTarget = false;
             attemptBindWhenReady();
         } else {
             unbindProducer();
@@ -652,13 +658,22 @@ final class MiuiPassBlurRefractionView extends TextureView
             return;
         }
 
-        Log.w(TAG, "producer transaction applied but no SurfaceFlinger frame arrived");
+        Log.w(TAG, "producer transaction applied but no SurfaceFlinger frame arrived"
+                + " target=" + (preferRawRootTarget ? "raw-root" : "public-child"));
         producerActive = false;
         unbindProducer();
-        if (noFrameRecoveryAttempts++ < 2) {
-            recreateInputProducer("no-first-frame");
+
+        if (!preferRawRootTarget) {
+            // Public child attachment is the preferred normal-app path. Some MIUI builds only
+            // drive PassBlur producers from a window root, so use the already-public root
+            // attachment as the boundary for one raw-root fallback attempt.
+            preferRawRootTarget = true;
+            noFrameRecoveryAttempts = 0;
+            recreateInputProducer("switch-to-raw-root");
+        } else if (noFrameRecoveryAttempts++ < 1) {
+            recreateInputProducer("raw-root-no-first-frame");
         } else {
-            Log.w(TAG, "refraction disabled after repeated no-frame producer binds; View PassBlur remains active");
+            Log.w(TAG, "refraction disabled after child+root producer attempts; View PassBlur remains active");
         }
     }
 
@@ -674,7 +689,11 @@ final class MiuiPassBlurRefractionView extends TextureView
         }
         if (binding != null && binding.bound) return;
         try {
-            binding = bindProducer(this, inputProducerSurface, captureScalePercent / 100f);
+            binding = bindProducer(
+                    this,
+                    inputProducerSurface,
+                    captureScalePercent / 100f,
+                    preferRawRootTarget);
             producerActive = binding != null && binding.bound;
             if (producerActive) {
                 producerFrameSeen = false;
@@ -707,27 +726,44 @@ final class MiuiPassBlurRefractionView extends TextureView
         postOnAnimation(this::attemptBindWhenReady);
     }
 
-    private static Binding bindProducer(View host, Surface producer, float scale) throws Exception {
-        // Android 31+ exposes the root attachment publicly. Avoid ViewRootImpl reflection entirely:
-        // a normal launcher app may legally create its own child SurfaceControl and attach it here.
+    private static Binding bindProducer(
+            View host,
+            Surface producer,
+            float scale,
+            boolean rawRootTarget) throws Exception {
         AttachedSurfaceControl attachedRoot = host.getRootSurfaceControl();
         if (attachedRoot == null) return null;
 
-        SurfaceControl captureNode = new SurfaceControl.Builder()
-                .setName("DuoLauncherMIUIGlass-PassBlurCapture")
-                .build();
-
+        SurfaceControl target = null;
+        boolean ownsTarget = false;
         SurfaceControl.Transaction parentTransaction = null;
-        boolean attached = false;
         try {
-            parentTransaction = attachedRoot.buildReparentTransaction(captureNode);
-            if (parentTransaction == null) {
-                captureNode.release();
-                return null;
+            if (rawRootTarget) {
+                Method getSurfaceControl = attachedRoot.getClass().getMethod("getSurfaceControl");
+                Object rawTarget = getSurfaceControl.invoke(attachedRoot);
+                if (!(rawTarget instanceof SurfaceControl)) {
+                    throw new IllegalStateException("AttachedSurfaceControl raw root unavailable");
+                }
+                target = (SurfaceControl) rawTarget;
+                if (!target.isValid()) {
+                    throw new IllegalStateException("AttachedSurfaceControl raw root invalid");
+                }
+                Log.i(TAG, "using raw root SurfaceControl fallback target=" + surfaceName(target));
+            } else {
+                target = new SurfaceControl.Builder()
+                        .setName("DuoLauncherMIUIGlass-PassBlurCapture")
+                        .build();
+                ownsTarget = true;
+
+                parentTransaction = attachedRoot.buildReparentTransaction(target);
+                if (parentTransaction == null) {
+                    target.release();
+                    return null;
+                }
+                parentTransaction.show(target);
+                parentTransaction.apply();
+                Log.i(TAG, "PassBlur capture node attached through public AttachedSurfaceControl");
             }
-            parentTransaction.show(captureNode);
-            parentTransaction.apply();
-            attached = true;
 
             Class<?> transactionClass = SurfaceControl.Transaction.class;
             Method setPassBlurSurface = transactionClass.getMethod(
@@ -742,34 +778,39 @@ final class MiuiPassBlurRefractionView extends TextureView
                 close = transactionClass.getMethod("close");
             } catch (NoSuchMethodException ignored) {}
 
+            String targetName = surfaceName(target);
             String[] exclusions = new String[] {
-                    "DuoLauncherMIUIGlass-PassBlurCapture",
+                    targetName,
                     "NavigationBar",
                     "StatusBar",
                     "GestureStub"
             };
             Object transaction = transactionClass.getConstructor().newInstance();
             try {
-                setMiBlurWinExc.invoke(transaction, captureNode, (Object) exclusions);
-                setPassBlurSurface.invoke(transaction, captureNode, producer);
-                setUpdateTextureFlag.invoke(transaction, captureNode, true, scale);
+                setMiBlurWinExc.invoke(transaction, target, (Object) exclusions);
+                setPassBlurSurface.invoke(transaction, target, producer);
+                setUpdateTextureFlag.invoke(transaction, target, true, scale);
                 apply.invoke(transaction);
             } finally {
                 if (close != null) {
                     try { close.invoke(transaction); } catch (Throwable ignored) {}
                 }
             }
-            Log.i(TAG, "PassBlur capture node attached through public AttachedSurfaceControl");
-            return new Binding(captureNode, transactionClass,
+
+            Log.i(TAG, "PassBlur producer bound target="
+                    + (rawRootTarget ? "raw-root" : "public-child")
+                    + " name=" + targetName
+                    + " scale=" + scale);
+            return new Binding(target, transactionClass,
                     setPassBlurSurface, setUpdateTextureFlag, setMiBlurWinExc,
-                    apply, close, scale);
+                    apply, close, scale, ownsTarget);
         } catch (Throwable error) {
-            if (attached && captureNode.isValid()) {
+            if (ownsTarget && target != null && target.isValid()) {
                 try (SurfaceControl.Transaction cleanup = new SurfaceControl.Transaction()) {
-                    cleanup.reparent(captureNode, null).apply();
+                    cleanup.reparent(target, null).apply();
                 } catch (Throwable ignored) {}
+                try { target.release(); } catch (Throwable ignored) {}
             }
-            if (captureNode.isValid()) captureNode.release();
             throw error;
         } finally {
             if (parentTransaction != null) {
@@ -798,16 +839,20 @@ final class MiuiPassBlurRefractionView extends TextureView
                     }
                 }
 
-                try (SurfaceControl.Transaction detach = new SurfaceControl.Transaction()) {
-                    detach.reparent(current.captureNode, null).apply();
+                if (current.ownsTarget) {
+                    try (SurfaceControl.Transaction detach = new SurfaceControl.Transaction()) {
+                        detach.reparent(current.captureNode, null).apply();
+                    }
+                    current.captureNode.release();
                 }
-                current.captureNode.release();
             }
         } catch (Throwable error) {
             Log.w(TAG, "PassBlur producer unbind failed", error);
-            try {
-                if (current.captureNode.isValid()) current.captureNode.release();
-            } catch (Throwable ignored) {}
+            if (current.ownsTarget) {
+                try {
+                    if (current.captureNode.isValid()) current.captureNode.release();
+                } catch (Throwable ignored) {}
+            }
         } finally {
             current.bound = false;
         }
@@ -980,6 +1025,17 @@ final class MiuiPassBlurRefractionView extends TextureView
             eglContext = EGL14.EGL_NO_CONTEXT;
         });
         renderThread.quitSafely();
+    }
+
+    private static String surfaceName(SurfaceControl surface) {
+        if (surface == null) return "";
+        try {
+            Method getName = SurfaceControl.class.getDeclaredMethod("getName");
+            getName.setAccessible(true);
+            Object value = getName.invoke(surface);
+            if (value instanceof String) return (String) value;
+        } catch (Throwable ignored) {}
+        return surface.toString();
     }
 
     private static int createProgram(String vertexSource, String fragmentSource) {
