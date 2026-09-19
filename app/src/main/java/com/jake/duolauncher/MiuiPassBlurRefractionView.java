@@ -12,7 +12,9 @@ import android.opengl.GLES20;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.util.Log;
+import android.view.AttachedSurfaceControl;
 import android.view.Surface;
+import android.view.SurfaceControl;
 import android.view.TextureView;
 import android.view.View;
 
@@ -299,9 +301,8 @@ final class MiuiPassBlurRefractionView extends TextureView
     }
 
     private static final class Binding {
-        final Object rootSurface;
+        final SurfaceControl captureNode;
         final Class<?> transactionClass;
-        final Method isValid;
         final Method setPassBlurSurface;
         final Method setUpdateTextureFlag;
         final Method setMiBlurWinExc;
@@ -310,12 +311,11 @@ final class MiuiPassBlurRefractionView extends TextureView
         final float scale;
         boolean bound = true;
 
-        Binding(Object rootSurface, Class<?> transactionClass, Method isValid,
+        Binding(SurfaceControl captureNode, Class<?> transactionClass,
                 Method setPassBlurSurface, Method setUpdateTextureFlag,
                 Method setMiBlurWinExc, Method apply, Method close, float scale) {
-            this.rootSurface = rootSurface;
+            this.captureNode = captureNode;
             this.transactionClass = transactionClass;
-            this.isValid = isValid;
             this.setPassBlurSurface = setPassBlurSurface;
             this.setUpdateTextureFlag = setUpdateTextureFlag;
             this.setMiBlurWinExc = setMiBlurWinExc;
@@ -647,53 +647,74 @@ final class MiuiPassBlurRefractionView extends TextureView
     }
 
     private static Binding bindProducer(View host, Surface producer, float scale) throws Exception {
-        Method getViewRootImpl = View.class.getDeclaredMethod("getViewRootImpl");
-        getViewRootImpl.setAccessible(true);
-        Object viewRoot = getViewRootImpl.invoke(host);
-        if (viewRoot == null) return null;
+        // Android 31+ exposes the root attachment publicly. Avoid ViewRootImpl reflection entirely:
+        // a normal launcher app may legally create its own child SurfaceControl and attach it here.
+        AttachedSurfaceControl attachedRoot = host.getRootSurfaceControl();
+        if (attachedRoot == null) return null;
 
-        Method getSurfaceControl = viewRoot.getClass().getDeclaredMethod("getSurfaceControl");
-        getSurfaceControl.setAccessible(true);
-        Object rootSurface = getSurfaceControl.invoke(viewRoot);
-        if (rootSurface == null) return null;
+        SurfaceControl captureNode = new SurfaceControl.Builder()
+                .setName("DuoLauncherMIUIGlass-PassBlurCapture")
+                .build();
 
-        Class<?> surfaceControlClass = Class.forName("android.view.SurfaceControl");
-        Class<?> transactionClass = Class.forName("android.view.SurfaceControl$Transaction");
-        if (!surfaceControlClass.isInstance(rootSurface)) return null;
-
-        Method isValid = surfaceControlClass.getMethod("isValid");
-        if (!Boolean.TRUE.equals(isValid.invoke(rootSurface))) return null;
-
-        Method setPassBlurSurface = transactionClass.getMethod(
-                "SetPassBlurSurface", surfaceControlClass, Surface.class);
-        Method setUpdateTextureFlag = transactionClass.getMethod(
-                "setUpdateTextureFlag", surfaceControlClass, boolean.class, float.class);
-        Method setMiBlurWinExc = transactionClass.getMethod(
-                "setMiBlurWinExc", surfaceControlClass, String[].class);
-        Method apply = transactionClass.getMethod("apply");
-        Method close = null;
+        SurfaceControl.Transaction parentTransaction = null;
+        boolean attached = false;
         try {
-            close = transactionClass.getMethod("close");
-        } catch (NoSuchMethodException ignored) {}
+            parentTransaction = attachedRoot.buildReparentTransaction(captureNode);
+            if (parentTransaction == null) {
+                captureNode.release();
+                return null;
+            }
+            parentTransaction.show(captureNode);
+            parentTransaction.apply();
+            attached = true;
 
-        String rootName = surfaceName(rootSurface);
-        String[] exclusions = new String[] {
-                rootName, "NavigationBar", "StatusBar", "GestureStub"
-        };
-        Object transaction = transactionClass.getConstructor().newInstance();
-        try {
-            setMiBlurWinExc.invoke(transaction, rootSurface, (Object) exclusions);
-            setPassBlurSurface.invoke(transaction, rootSurface, producer);
-            setUpdateTextureFlag.invoke(transaction, rootSurface, true, scale);
-            apply.invoke(transaction);
+            Class<?> transactionClass = SurfaceControl.Transaction.class;
+            Method setPassBlurSurface = transactionClass.getMethod(
+                    "SetPassBlurSurface", SurfaceControl.class, Surface.class);
+            Method setUpdateTextureFlag = transactionClass.getMethod(
+                    "setUpdateTextureFlag", SurfaceControl.class, boolean.class, float.class);
+            Method setMiBlurWinExc = transactionClass.getMethod(
+                    "setMiBlurWinExc", SurfaceControl.class, String[].class);
+            Method apply = transactionClass.getMethod("apply");
+            Method close = null;
+            try {
+                close = transactionClass.getMethod("close");
+            } catch (NoSuchMethodException ignored) {}
+
+            String[] exclusions = new String[] {
+                    "DuoLauncherMIUIGlass-PassBlurCapture",
+                    "NavigationBar",
+                    "StatusBar",
+                    "GestureStub"
+            };
+            Object transaction = transactionClass.getConstructor().newInstance();
+            try {
+                setMiBlurWinExc.invoke(transaction, captureNode, (Object) exclusions);
+                setPassBlurSurface.invoke(transaction, captureNode, producer);
+                setUpdateTextureFlag.invoke(transaction, captureNode, true, scale);
+                apply.invoke(transaction);
+            } finally {
+                if (close != null) {
+                    try { close.invoke(transaction); } catch (Throwable ignored) {}
+                }
+            }
+            Log.i(TAG, "PassBlur capture node attached through public AttachedSurfaceControl");
+            return new Binding(captureNode, transactionClass,
+                    setPassBlurSurface, setUpdateTextureFlag, setMiBlurWinExc,
+                    apply, close, scale);
+        } catch (Throwable error) {
+            if (attached && captureNode.isValid()) {
+                try (SurfaceControl.Transaction cleanup = new SurfaceControl.Transaction()) {
+                    cleanup.reparent(captureNode, null).apply();
+                } catch (Throwable ignored) {}
+            }
+            if (captureNode.isValid()) captureNode.release();
+            throw error;
         } finally {
-            if (close != null) {
-                try { close.invoke(transaction); } catch (Throwable ignored) {}
+            if (parentTransaction != null) {
+                try { parentTransaction.close(); } catch (Throwable ignored) {}
             }
         }
-        return new Binding(rootSurface, transactionClass, isValid,
-                setPassBlurSurface, setUpdateTextureFlag, setMiBlurWinExc,
-                apply, close, scale);
     }
 
     private void unbindProducer() {
@@ -701,23 +722,31 @@ final class MiuiPassBlurRefractionView extends TextureView
         binding = null;
         if (current == null || !current.bound) return;
         try {
-            if (Boolean.TRUE.equals(current.isValid.invoke(current.rootSurface))) {
+            if (current.captureNode.isValid()) {
                 Object transaction = current.transactionClass.getConstructor().newInstance();
                 try {
-                    current.setPassBlurSurface.invoke(transaction, current.rootSurface, null);
+                    current.setPassBlurSurface.invoke(transaction, current.captureNode, null);
                     current.setUpdateTextureFlag.invoke(
-                            transaction, current.rootSurface, false, current.scale);
+                            transaction, current.captureNode, false, current.scale);
                     current.setMiBlurWinExc.invoke(
-                            transaction, current.rootSurface, (Object) new String[0]);
+                            transaction, current.captureNode, (Object) new String[0]);
                     current.apply.invoke(transaction);
                 } finally {
                     if (current.close != null) {
                         try { current.close.invoke(transaction); } catch (Throwable ignored) {}
                     }
                 }
+
+                try (SurfaceControl.Transaction detach = new SurfaceControl.Transaction()) {
+                    detach.reparent(current.captureNode, null).apply();
+                }
+                current.captureNode.release();
             }
         } catch (Throwable error) {
             Log.w(TAG, "PassBlur producer unbind failed", error);
+            try {
+                if (current.captureNode.isValid()) current.captureNode.release();
+            } catch (Throwable ignored) {}
         } finally {
             current.bound = false;
         }
@@ -884,17 +913,6 @@ final class MiuiPassBlurRefractionView extends TextureView
             eglContext = EGL14.EGL_NO_CONTEXT;
         });
         renderThread.quitSafely();
-    }
-
-    private static String surfaceName(Object surface) {
-        if (surface == null) return "";
-        try {
-            Method getName = surface.getClass().getDeclaredMethod("getName");
-            getName.setAccessible(true);
-            Object value = getName.invoke(surface);
-            if (value instanceof String) return (String) value;
-        } catch (Throwable ignored) {}
-        return surface.toString();
     }
 
     private static int createProgram(String vertexSource, String fragmentSource) {
