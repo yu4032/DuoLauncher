@@ -9,6 +9,7 @@ import android.opengl.EGLDisplay;
 import android.opengl.EGLSurface;
 import android.opengl.GLES11Ext;
 import android.opengl.GLES20;
+import android.os.Build;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.util.Log;
@@ -748,10 +749,12 @@ final class MiuiPassBlurRefractionView extends TextureView
                 }
                 Log.i(TAG, "using raw root SurfaceControl fallback target=" + surfaceName(target));
             } else {
-                target = new SurfaceControl.Builder()
-                        .setName("DuoLauncherMIUIGlass-PassBlurCapture")
-                        .setHidden(false)
-                        .build();
+                SurfaceControl.Builder builder = new SurfaceControl.Builder()
+                        .setName("DuoLauncherMIUIGlass-PassBlurCapture");
+                if (Build.VERSION.SDK_INT >= 33) {
+                    builder.setHidden(false);
+                }
+                target = builder.build();
                 ownsTarget = true;
 
                 parentTransaction = attachedRoot.buildReparentTransaction(target);
