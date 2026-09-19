@@ -335,18 +335,17 @@ internal fun LiquidGlassSurface(
                 modifier = Modifier.matchParentSize(),
                 update = {
                     it.updateMaterial(
-                        enableRefraction = settings.passBlurEnabled &&
-                            settings.refractionEnabled && refractionEligible,
-                        priority = refractionPriority,
-                        captureScalePercent = settings.captureScalePercent,
-                        blurRadiusPx = settings.blurRadiusPx,
-                        refractionStrengthPx = settings.refractionStrengthPx.toFloat(),
-                        refractionInsetPx = settings.refractionInsetPx.toFloat(),
-                        chromatic = settings.chromatic.toFloat(),
-                        dispersionR = settings.dispersionRPercent / 100f,
-                        dispersionB = settings.dispersionBPercent / 100f,
-                        cornerRadiusPx = refractionCornerRadiusPx,
-                        tintArgb = paletteTint.toArgb(),
+                        settings.passBlurEnabled && settings.refractionEnabled && refractionEligible,
+                        refractionPriority,
+                        settings.captureScalePercent,
+                        settings.blurRadiusPx,
+                        settings.refractionStrengthPx.toFloat(),
+                        settings.refractionInsetPx.toFloat(),
+                        settings.chromatic.toFloat(),
+                        settings.dispersionRPercent / 100f,
+                        settings.dispersionBPercent / 100f,
+                        refractionCornerRadiusPx,
+                        paletteTint.toArgb(),
                     )
                 },
             )
