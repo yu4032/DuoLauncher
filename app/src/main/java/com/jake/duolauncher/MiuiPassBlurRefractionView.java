@@ -377,6 +377,9 @@ final class MiuiPassBlurRefractionView extends TextureView
     private int bindAttempts;
     private boolean activeLogged;
     private boolean failureLogged;
+    private volatile boolean producerFrameSeen;
+    private volatile boolean presentedFrameSeen;
+    private int noFrameRecoveryAttempts;
 
     MiuiPassBlurRefractionView(Context context) {
         super(context);
@@ -424,8 +427,7 @@ final class MiuiPassBlurRefractionView extends TextureView
                 if (!authorityOwner || !requested || shuttingDown) return;
                 producerActive = false;
                 unbindProducer();
-                bindAttempts = 0;
-                attemptBindWhenReady();
+                recreateInputProducer("capture-scale");
             });
         } else if (producerActive) {
             requestDraw();
@@ -588,7 +590,13 @@ final class MiuiPassBlurRefractionView extends TextureView
 
         inputSurfaceTexture = new SurfaceTexture(oesTexture);
         resizeInputProducer();
-        inputSurfaceTexture.setOnFrameAvailableListener(ignored -> requestDraw(), renderHandler);
+        inputSurfaceTexture.setOnFrameAvailableListener(ignored -> {
+            if (!producerFrameSeen) {
+                producerFrameSeen = true;
+                Log.i(TAG, "first PassBlur producer frame received");
+            }
+            requestDraw();
+        }, renderHandler);
         inputProducerSurface = new Surface(inputSurfaceTexture);
     }
 
@@ -599,6 +607,59 @@ final class MiuiPassBlurRefractionView extends TextureView
         input.setDefaultBufferSize(
                 Math.max(1, Math.round(rootWidth * scale)),
                 Math.max(1, Math.round(rootHeight * scale)));
+    }
+
+    private void recreateInputProducer(String reason) {
+        if (shuttingDown) return;
+        producerFrameSeen = false;
+        presentedFrameSeen = false;
+        renderHandler.post(() -> {
+            try {
+                makeCurrent();
+                Surface staleSurface = inputProducerSurface;
+                SurfaceTexture staleTexture = inputSurfaceTexture;
+                inputProducerSurface = null;
+                inputSurfaceTexture = null;
+
+                if (staleSurface != null) staleSurface.release();
+                if (staleTexture != null) {
+                    try { staleTexture.setOnFrameAvailableListener(null); } catch (Throwable ignored) {}
+                    staleTexture.release();
+                }
+                if (oesTexture != 0) {
+                    GLES20.glDeleteTextures(1, new int[]{oesTexture}, 0);
+                    oesTexture = 0;
+                }
+
+                ensureInputProducer();
+                Log.i(TAG, "PassBlur input producer recreated reason=" + reason);
+                mainHandler.post(() -> {
+                    if (shuttingDown || !requested || !authorityOwner) return;
+                    bindAttempts = 0;
+                    attemptBindWhenReady();
+                });
+            } catch (Throwable error) {
+                fail("producer recreate", error);
+            }
+        });
+    }
+
+    private void verifyFirstProducerFrame(int framesLeft) {
+        if (shuttingDown || !requested || !authorityOwner || !producerActive) return;
+        if (producerFrameSeen) return;
+        if (framesLeft > 0) {
+            postOnAnimation(() -> verifyFirstProducerFrame(framesLeft - 1));
+            return;
+        }
+
+        Log.w(TAG, "producer transaction applied but no SurfaceFlinger frame arrived");
+        producerActive = false;
+        unbindProducer();
+        if (noFrameRecoveryAttempts++ < 2) {
+            recreateInputProducer("no-first-frame");
+        } else {
+            Log.w(TAG, "refraction disabled after repeated no-frame producer binds; View PassBlur remains active");
+        }
     }
 
     private void attemptBindWhenReady() {
@@ -616,11 +677,11 @@ final class MiuiPassBlurRefractionView extends TextureView
             binding = bindProducer(this, inputProducerSurface, captureScalePercent / 100f);
             producerActive = binding != null && binding.bound;
             if (producerActive) {
-                if (!activeLogged) {
-                    activeLogged = true;
-                    Log.i(TAG, "zero-copy PassBlur refraction active scale="
-                            + captureScalePercent + "%");
-                }
+                producerFrameSeen = false;
+                presentedFrameSeen = false;
+                postOnAnimation(() -> verifyFirstProducerFrame(12));
+                Log.i(TAG, "PassBlur producer transaction applied; waiting for first frame scale="
+                        + captureScalePercent + "%");
             } else {
                 scheduleBindRetry();
             }
@@ -817,13 +878,19 @@ final class MiuiPassBlurRefractionView extends TextureView
             GLES20.glDisableVertexAttribArray(position);
             GLES20.glDisableVertexAttribArray(uv);
             EGL14.eglSwapBuffers(eglDisplay, eglWindowSurface);
+            if (!presentedFrameSeen) {
+                presentedFrameSeen = true;
+                if (!activeLogged) {
+                    activeLogged = true;
+                    Log.i(TAG, "first refracted frame presented; zero-copy refraction active");
+                }
+            }
         } catch (Throwable error) {
             producerActive = false;
             fail("render", error);
             mainHandler.post(() -> {
                 unbindProducer();
-                bindAttempts = 0;
-                attemptBindWhenReady();
+                recreateInputProducer("render-failure");
             });
         }
     }
