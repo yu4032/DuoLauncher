@@ -40,6 +40,14 @@ internal enum class LiquidGlassRole {
 internal data class LiquidGlassSettings(
     val enabled: Boolean = true,
     val passBlurEnabled: Boolean = true,
+    val refractionEnabled: Boolean = true,
+    val refractionCardsEnabled: Boolean = false,
+    val captureScalePercent: Int = 50,
+    val refractionStrengthPx: Int = 12,
+    val refractionInsetPx: Int = 20,
+    val chromatic: Int = 26,
+    val dispersionRPercent: Int = 100,
+    val dispersionBPercent: Int = 100,
     val dockEnabled: Boolean = true,
     val panelEnabled: Boolean = true,
     val cardEnabled: Boolean = true,
@@ -84,6 +92,12 @@ internal data class LiquidGlassSettings(
 
     fun normalized() = copy(
         blurRadiusPx = blurRadiusPx.coerceIn(0, 400),
+        captureScalePercent = captureScalePercent.coerceIn(25, 100),
+        refractionStrengthPx = refractionStrengthPx.coerceIn(0, 80),
+        refractionInsetPx = refractionInsetPx.coerceIn(1, 120),
+        chromatic = chromatic.coerceIn(0, 80),
+        dispersionRPercent = dispersionRPercent.coerceIn(0, 400),
+        dispersionBPercent = dispersionBPercent.coerceIn(0, 400),
         tintAlpha = tintAlpha.coerceIn(0, 160),
         tintRed = tintRed.coerceIn(0, 255),
         tintGreen = tintGreen.coerceIn(0, 255),
@@ -113,6 +127,14 @@ internal class LiquidGlassStore(context: Context) {
         prefs.edit()
             .putBoolean("enabled", normalized.enabled)
             .putBoolean("pass_blur_enabled", normalized.passBlurEnabled)
+            .putBoolean("refraction_enabled", normalized.refractionEnabled)
+            .putBoolean("refraction_cards_enabled", normalized.refractionCardsEnabled)
+            .putInt("capture_scale_percent", normalized.captureScalePercent)
+            .putInt("refraction_strength_px", normalized.refractionStrengthPx)
+            .putInt("refraction_inset_px", normalized.refractionInsetPx)
+            .putInt("chromatic", normalized.chromatic)
+            .putInt("dispersion_r_percent", normalized.dispersionRPercent)
+            .putInt("dispersion_b_percent", normalized.dispersionBPercent)
             .putBoolean("dock_enabled", normalized.dockEnabled)
             .putBoolean("panel_enabled", normalized.panelEnabled)
             .putBoolean("card_enabled", normalized.cardEnabled)
@@ -154,6 +176,14 @@ internal class LiquidGlassStore(context: Context) {
         return LiquidGlassSettings(
             enabled = prefs.getBoolean("enabled", d.enabled),
             passBlurEnabled = prefs.getBoolean("pass_blur_enabled", d.passBlurEnabled),
+            refractionEnabled = prefs.getBoolean("refraction_enabled", d.refractionEnabled),
+            refractionCardsEnabled = prefs.getBoolean("refraction_cards_enabled", d.refractionCardsEnabled),
+            captureScalePercent = prefs.getInt("capture_scale_percent", d.captureScalePercent),
+            refractionStrengthPx = prefs.getInt("refraction_strength_px", d.refractionStrengthPx),
+            refractionInsetPx = prefs.getInt("refraction_inset_px", d.refractionInsetPx),
+            chromatic = prefs.getInt("chromatic", d.chromatic),
+            dispersionRPercent = prefs.getInt("dispersion_r_percent", d.dispersionRPercent),
+            dispersionBPercent = prefs.getInt("dispersion_b_percent", d.dispersionBPercent),
             dockEnabled = prefs.getBoolean("dock_enabled", d.dockEnabled),
             panelEnabled = prefs.getBoolean("panel_enabled", d.panelEnabled),
             cardEnabled = prefs.getBoolean("card_enabled", d.cardEnabled),
@@ -212,6 +242,9 @@ private fun LiquidGlassPreset.settings(current: LiquidGlassSettings): LiquidGlas
     )
     LiquidGlassPreset.CLEAR -> current.copy(
         blurRadiusPx = 64,
+        refractionStrengthPx = 7,
+        refractionInsetPx = 14,
+        chromatic = 10,
         tintAlpha = 12,
         highlightWidthPercent = 80,
         highlightAlphaPercent = 72,
@@ -223,6 +256,9 @@ private fun LiquidGlassPreset.settings(current: LiquidGlassSettings): LiquidGlas
     )
     LiquidGlassPreset.FROSTED -> current.copy(
         blurRadiusPx = 180,
+        refractionStrengthPx = 8,
+        refractionInsetPx = 24,
+        chromatic = 8,
         tintAlpha = 76,
         highlightWidthPercent = 125,
         highlightAlphaPercent = 112,
@@ -234,6 +270,11 @@ private fun LiquidGlassPreset.settings(current: LiquidGlassSettings): LiquidGlas
     )
     LiquidGlassPreset.OS4 -> current.copy(
         blurRadiusPx = 100,
+        refractionStrengthPx = 12,
+        refractionInsetPx = 20,
+        chromatic = 26,
+        dispersionRPercent = 100,
+        dispersionBPercent = 100,
         tintAlpha = 35,
         highlightWidthPercent = 100,
         highlightAlphaPercent = 100,
@@ -267,6 +308,66 @@ internal fun LiquidGlassSettingsPanel() {
         GlassSettingSwitch("Use MIUI PassBlur", settings.passBlurEnabled, settings.enabled) {
             update(settings.copy(passBlurEnabled = it))
         }
+
+        HorizontalDivider()
+        Text("True refraction", style = MaterialTheme.typography.titleSmall)
+        Text(
+            "Uses the HyperOS SurfaceControl PassBlur producer as a GPU texture, then displaces background UVs before sharp highlights are added. One visible large surface owns the producer at a time; other glass keeps the normal PassBlur fallback.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        GlassSettingSwitch(
+            "Enable GPU refraction",
+            settings.refractionEnabled,
+            settings.enabled && settings.passBlurEnabled,
+        ) { update(settings.copy(refractionEnabled = it)) }
+        GlassSettingSwitch(
+            "Allow refraction on cards",
+            settings.refractionCardsEnabled,
+            settings.enabled && settings.passBlurEnabled && settings.refractionEnabled,
+        ) { update(settings.copy(refractionCardsEnabled = it)) }
+        GlassSettingSlider(
+            "Producer capture scale",
+            settings.captureScalePercent,
+            25..100,
+            "%",
+            settings.enabled && settings.passBlurEnabled && settings.refractionEnabled,
+        ) { update(settings.copy(captureScalePercent = it)) }
+        GlassSettingSlider(
+            "Refraction strength",
+            settings.refractionStrengthPx,
+            0..80,
+            " px",
+            settings.enabled && settings.passBlurEnabled && settings.refractionEnabled,
+        ) { update(settings.copy(refractionStrengthPx = it)) }
+        GlassSettingSlider(
+            "Refraction edge inset",
+            settings.refractionInsetPx,
+            1..120,
+            " px",
+            settings.enabled && settings.passBlurEnabled && settings.refractionEnabled,
+        ) { update(settings.copy(refractionInsetPx = it)) }
+        GlassSettingSlider(
+            "Chromatic dispersion",
+            settings.chromatic,
+            0..80,
+            "",
+            settings.enabled && settings.passBlurEnabled && settings.refractionEnabled,
+        ) { update(settings.copy(chromatic = it)) }
+        GlassSettingSlider(
+            "Red dispersion",
+            settings.dispersionRPercent,
+            0..400,
+            "%",
+            settings.enabled && settings.passBlurEnabled && settings.refractionEnabled,
+        ) { update(settings.copy(dispersionRPercent = it)) }
+        GlassSettingSlider(
+            "Blue dispersion",
+            settings.dispersionBPercent,
+            0..400,
+            "%",
+            settings.enabled && settings.passBlurEnabled && settings.refractionEnabled,
+        ) { update(settings.copy(dispersionBPercent = it)) }
 
         Text("Presets", style = MaterialTheme.typography.titleSmall)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -362,7 +463,7 @@ internal fun LiquidGlassSettingsPanel() {
         GlassSettingSwitch("Caustic wash", settings.caustics, settings.enabled) { update(settings.copy(caustics = it)) }
 
         Text(
-            "Prismal background-UV refraction is intentionally not exposed here yet. That path needs a validated SurfaceControl PassBlur producer in Duo's normal app process; these controls all affect the current renderer.",
+            "Rim, specular, haze, face sheen, and caustic controls are composited after refraction, so their edges remain sharp even when backdrop blur is strong.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
