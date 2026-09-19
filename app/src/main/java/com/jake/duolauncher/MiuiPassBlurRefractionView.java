@@ -338,7 +338,7 @@ final class MiuiPassBlurRefractionView extends TextureView
     private volatile boolean shuttingDown;
     private volatile boolean producerActive;
     private volatile int priority;
-    private volatile int captureScalePercent = 50;
+    private volatile int captureScalePercent = 100;
     private volatile int blurRadiusPx = 100;
     private volatile float refractionStrengthPx = 12f;
     private volatile float refractionInsetPx = 20f;
@@ -403,7 +403,7 @@ final class MiuiPassBlurRefractionView extends TextureView
         int oldCaptureScalePercent = this.captureScalePercent;
         this.requested = enableRefraction;
         this.priority = priority;
-        this.captureScalePercent = Math.max(25, Math.min(100, captureScalePercent));
+        this.captureScalePercent = Math.max(50, Math.min(100, captureScalePercent));
         this.blurRadiusPx = Math.max(0, Math.min(400, blurRadiusPx));
         this.refractionStrengthPx = Math.max(0f, Math.min(80f, refractionStrengthPx));
         this.refractionInsetPx = Math.max(1f, Math.min(120f, refractionInsetPx));
