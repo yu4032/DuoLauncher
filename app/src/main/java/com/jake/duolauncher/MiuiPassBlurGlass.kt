@@ -312,6 +312,9 @@ internal fun LiquidGlassSurface(
             LiquidGlassRole.TRANSIENT -> 18.dp.toPx()
         }
     }
+    val largeHighlightEdgePx = with(density) {
+        (settings.highlightWidthPercent / 100f).coerceIn(.5f, 3f).dp.toPx()
+    }
 
     Box(
         modifier = modifier.clip(shape),
@@ -349,9 +352,35 @@ internal fun LiquidGlassSurface(
                     )
                 },
             )
-            // Refraction is the backdrop body. Keep the optical/highlight presentation above it
-            // so rim/specular/face sheen never get softened by the blur sampler.
-            LiquidGlassOpticsOverlay(shape, settings)
+            // Large surfaces keep the sharp presentation in the platform View hierarchy.
+            // This avoids AndroidView/Compose interop ordering from hiding the rim behind PassBlur.
+            AndroidView(
+                factory = { MiuiGlassHighlightView(it) },
+                modifier = Modifier.matchParentSize(),
+                update = {
+                    it.updateMaterial(
+                        refractionCornerRadiusPx,
+                        settings.brightnessPercent / 100f,
+                        settings.highlightAlphaPercent / 100f,
+                        settings.reflectionStrengthPercent / 100f,
+                        settings.reflectionLightenPercent / 100f,
+                        settings.directionalIntensityPercent / 100f,
+                        settings.oppositeIntensityPercent / 100f,
+                        (settings.directionalAngleRangePercent / 150f).coerceIn(.03f, 1f),
+                        largeHighlightEdgePx,
+                        settings.lightDirXPercent / 100f,
+                        settings.lightDirYPercent / 100f,
+                        settings.skyHaze,
+                        settings.specular,
+                        settings.litRim,
+                        settings.oppositeRim,
+                        settings.cornerRim,
+                        settings.faceSheen,
+                        settings.plainHighlight,
+                        settings.caustics,
+                    )
+                },
+            )
         } else {
             Box(Modifier.matchParentSize().background(fallbackColor))
         }
