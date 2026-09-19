@@ -576,13 +576,11 @@ fun LauncherScreen(
                 compact = contentHeight < 500.dp, iconSize = dockIconSize(geometry.iconSize).dp)
             LiquidGlassSurface(
                 Modifier.align(Alignment.TopEnd).padding(end = 12.dp).offset(y = geometry.dockTop.dp)
-                    .width(preset.dockWidth.dp).height(geometry.dockHeight.dp).graphicsLayer {
-                        // Composite the stationary dock independently of the shared pager layer.
-                        compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen
-                    }.testTag("dock"),
+                    .width(preset.dockWidth.dp).height(geometry.dockHeight.dp).testTag("dock"),
                 shape = RoundedCornerShape(30.dp),
                 fallbackColor = Glass.copy(alpha = .32f),
                 border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = .3f)),
+                role = LiquidGlassRole.DOCK,
             ) {
                 Column(Modifier.padding(vertical = 8.dp).verticalScroll(dockScroll)) {
                     DockAppColumn(state.dock, previewLayout.dock, appsById, geometry.dockRowHeight,
@@ -1409,9 +1407,16 @@ private fun HomePagePane(
 @Composable
 private fun CircleControl(icon: ImageVector, label: String, tag: String, visualSize: Dp, action: () -> Unit) {
     IconButton(onClick = action, modifier = Modifier.size(visualSize.coerceAtLeast(48.dp)).testTag(tag)) {
-        Box(Modifier.size(visualSize).testTag("$tag-visual").background(Glass.copy(alpha = .22f), CircleShape)
-            .border(1.dp, Color.White.copy(alpha = .25f), CircleShape), contentAlignment = Alignment.Center) {
-            Icon(icon, label, tint = Color.White, modifier = Modifier.size(22.dp))
+        LiquidGlassTintSurface(
+            Modifier.size(visualSize).testTag("$tag-visual"),
+            shape = CircleShape,
+            fallbackColor = Glass.copy(alpha = .22f),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = .25f)),
+            role = LiquidGlassRole.CONTROL,
+        ) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Icon(icon, label, tint = Color.White, modifier = Modifier.size(22.dp))
+            }
         }
     }
 }
@@ -1541,11 +1546,16 @@ private fun SharedHomeGrid(
                 val width = (cellWidth * placement.spanX - 10.dp).coerceAtLeast(1.dp)
                 val y = rowTop(placement.row)
                 val height = (rowTop(placement.row + placement.spanY) - y - 18f).coerceAtLeast(48f)
-                if (placement == pending) Surface(Modifier.offset(x = x, y = y.dp).width(width).height(height.dp)
-                    .testTag("widget-pending-${placement.slot}").semantics(mergeDescendants = true) {
-                        contentDescription = "Pending ${widgets.pendingProvider?.shortClassName ?: "widget"}"
-                    }, color = Glass.copy(alpha = .72f),
-                    shape = RoundedCornerShape(24.dp), border = androidx.compose.foundation.BorderStroke(2.dp, Color.White)) {
+                if (placement == pending) LiquidGlassSurface(
+                    Modifier.offset(x = x, y = y.dp).width(width).height(height.dp)
+                        .testTag("widget-pending-${placement.slot}").semantics(mergeDescendants = true) {
+                            contentDescription = "Pending ${widgets.pendingProvider?.shortClassName ?: "widget"}"
+                        },
+                    fallbackColor = Glass.copy(alpha = .72f),
+                    shape = RoundedCornerShape(24.dp),
+                    border = androidx.compose.foundation.BorderStroke(2.dp, Color.White),
+                    role = LiquidGlassRole.WIDGET,
+                ) {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.Center,
                         horizontalAlignment = Alignment.CenterHorizontally) {
                         CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 3.dp)
@@ -1651,10 +1661,15 @@ private fun FolderTile(folder: FolderEntry, apps: Map<String, AppEntry>, size: F
     Column(modifier.clickable(onClick = onClick).semantics(mergeDescendants = true) {
         contentDescription = "Folder ${folder.title}, ${folder.appIds.size} apps"
     }, horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(Modifier.size(size.dp).clip(RoundedCornerShape((size * .24f).dp))
-            .background(Glass.copy(alpha = .72f)).border(1.dp, Color.White.copy(alpha = .55f), RoundedCornerShape((size * .24f).dp))
-            .dropRegion(drag, DropTarget.Folder(folder.id), page = page, folderId = folder.id)
-            .testTag("folder-drop-${folder.id}")) {
+        LiquidGlassTintSurface(
+            Modifier.size(size.dp)
+                .dropRegion(drag, DropTarget.Folder(folder.id), page = page, folderId = folder.id)
+                .testTag("folder-drop-${folder.id}"),
+            shape = RoundedCornerShape((size * .24f).dp),
+            fallbackColor = Glass.copy(alpha = .72f),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = .55f)),
+            role = LiquidGlassRole.FOLDER,
+        ) {
             folder.appIds.take(4).forEachIndexed { index, id ->
                 apps[id]?.let { app ->
                     Image(app.icon.asImageBitmap(), null, Modifier.align(when (index) {
@@ -1695,6 +1710,7 @@ private fun GlassCard(modifier: Modifier = Modifier, onClick: () -> Unit, conten
         shape = RoundedCornerShape(24.dp),
         fallbackColor = Glass.copy(alpha = .24f),
         border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = .18f)),
+        role = LiquidGlassRole.CARD,
     ) {
         Column(Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.SpaceBetween, content = content)
     }
@@ -1754,8 +1770,13 @@ private fun WidgetSlot(id: Int, slot: Int, controller: WidgetController, modifie
         val displayedContentSize = WidgetContentSize(maxWidth.value, maxHeight.value)
         if (id == NEEDS_BINDING_WIDGET) {
             val restore = controller.restoreDescriptor(slot)
-            Surface(Modifier.fillMaxSize().testTag("widget-restore-$slot"), color = Glass.copy(alpha = .88f),
-                shape = RoundedCornerShape(24.dp), border = androidx.compose.foundation.BorderStroke(2.dp, Color.White.copy(alpha = .7f))) {
+            LiquidGlassSurface(
+                Modifier.fillMaxSize().testTag("widget-restore-$slot"),
+                fallbackColor = Glass.copy(alpha = .88f),
+                shape = RoundedCornerShape(24.dp),
+                border = androidx.compose.foundation.BorderStroke(2.dp, Color.White.copy(alpha = .7f)),
+                role = LiquidGlassRole.WIDGET,
+            ) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.Center,
                     horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(restore?.title ?: "Saved widget", color = Ink, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
@@ -1811,8 +1832,13 @@ private fun MovableWidget(id: Int, slot: Int, controller: WidgetController, drag
                 Text("Your widgets", color = Color.White, fontSize = 15.sp, maxLines = 1)
                 Text("Tap to choose", color = Color.White.copy(alpha = .8f), fontSize = 12.sp)
             }
-            else -> Surface(Modifier.fillMaxSize().clickable(onClick = onAdd), color = Glass.copy(alpha = .18f),
-                shape = RoundedCornerShape(24.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = .25f))) {
+            else -> LiquidGlassSurface(
+                Modifier.fillMaxSize().clickable(onClick = onAdd),
+                fallbackColor = Glass.copy(alpha = .18f),
+                shape = RoundedCornerShape(24.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = .25f)),
+                role = LiquidGlassRole.WIDGET,
+            ) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Rounded.Add, null, tint = Color.White)
                     Text(if (id >= 0) "Widget unavailable" else "Add widget", color = Color.White, fontSize = 12.sp)
