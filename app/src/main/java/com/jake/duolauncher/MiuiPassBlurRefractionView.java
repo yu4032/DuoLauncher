@@ -251,8 +251,6 @@ final class MiuiPassBlurRefractionView extends TextureView
             if (oldOwner != newOwner) {
                 if (oldOwner != null) oldOwner.post(() -> oldOwner.onAuthorityChanged(false));
                 if (newOwner != null) newOwner.post(() -> newOwner.onAuthorityChanged(true));
-            } else if (newOwner == view && requested) {
-                view.post(() -> view.onAuthorityChanged(true));
             }
         }
 
