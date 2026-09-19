@@ -81,6 +81,7 @@ final class MiuiPassBlurRefractionView extends TextureView
             uniform float uDispersionR;
             uniform float uDispersionB;
             uniform float uBlurStepPx;
+            uniform vec4 uTintColor;
             varying vec2 vUv;
 
             vec2 orientRootUv(vec2 rootUv) {
@@ -196,6 +197,7 @@ final class MiuiPassBlurRefractionView extends TextureView
                 vec3 direct = sampleRoot(displacedRoot).rgb;
                 float meniscus = smoothstep(0.0, 0.72, edge);
                 color = mix(direct, color, 0.30 + 0.70 * meniscus);
+                color = mix(color, uTintColor.rgb, clamp(uTintColor.a, 0.0, 0.72));
 
                 gl_FragColor = vec4(color, alpha);
             }
@@ -344,6 +346,10 @@ final class MiuiPassBlurRefractionView extends TextureView
     private volatile float dispersionR = 1f;
     private volatile float dispersionB = 1f;
     private volatile float cornerRadiusPx = 30f;
+    private volatile float tintR;
+    private volatile float tintG;
+    private volatile float tintB;
+    private volatile float tintA;
 
     private volatile float backdropX;
     private volatile float backdropY;
@@ -393,7 +399,7 @@ final class MiuiPassBlurRefractionView extends TextureView
     void updateMaterial(boolean enableRefraction, int priority, int captureScalePercent,
                         int blurRadiusPx, float refractionStrengthPx, float refractionInsetPx,
                         float chromatic, float dispersionR, float dispersionB,
-                        float cornerRadiusPx) {
+                        float cornerRadiusPx, int tintArgb) {
         int oldCaptureScalePercent = this.captureScalePercent;
         this.requested = enableRefraction;
         this.priority = priority;
@@ -405,6 +411,10 @@ final class MiuiPassBlurRefractionView extends TextureView
         this.dispersionR = Math.max(0f, Math.min(4f, dispersionR));
         this.dispersionB = Math.max(0f, Math.min(4f, dispersionB));
         this.cornerRadiusPx = Math.max(0f, cornerRadiusPx);
+        this.tintR = android.graphics.Color.red(tintArgb) / 255f;
+        this.tintG = android.graphics.Color.green(tintArgb) / 255f;
+        this.tintB = android.graphics.Color.blue(tintArgb) / 255f;
+        this.tintA = android.graphics.Color.alpha(tintArgb) / 255f;
         updateBackdropMapping();
         RefractionAuthority.update(this,
                 enableRefraction && isAttachedToWindow() && getVisibility() == VISIBLE,
@@ -771,6 +781,8 @@ final class MiuiPassBlurRefractionView extends TextureView
             GLES20.glUniform1f(GLES20.glGetUniformLocation(program, "uDispersionB"), dispersionB);
             GLES20.glUniform1f(GLES20.glGetUniformLocation(program, "uBlurStepPx"),
                     Math.min(5f, blurRadiusPx * 0.035f));
+            GLES20.glUniform4f(GLES20.glGetUniformLocation(program, "uTintColor"),
+                    tintR, tintG, tintB, tintA);
 
             GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
             GLES20.glDisableVertexAttribArray(position);
