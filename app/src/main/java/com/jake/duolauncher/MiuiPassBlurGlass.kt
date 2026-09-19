@@ -304,15 +304,18 @@ internal fun LiquidGlassTintSurface(
 ) {
     val settings = LocalLiquidGlassSettings.current
     val materialEnabled = enabled && settings.enabledFor(role)
-    val tint = if (materialEnabled && !settings.followPaletteTint) {
+    val scaledAlpha = (fallbackColor.alpha * settings.tintAlpha / 35f).coerceIn(0f, 1f)
+    val tint = if (!materialEnabled) {
+        fallbackColor
+    } else if (settings.followPaletteTint) {
+        fallbackColor.copy(alpha = scaledAlpha)
+    } else {
         Color(
             red = settings.tintRed / 255f,
             green = settings.tintGreen / 255f,
             blue = settings.tintBlue / 255f,
-            alpha = maxOf(fallbackColor.alpha, settings.tintAlpha / 255f),
+            alpha = scaledAlpha,
         )
-    } else {
-        fallbackColor
     }
     Box(
         modifier = modifier.clip(shape).background(tint),
@@ -321,6 +324,26 @@ internal fun LiquidGlassTintSurface(
         if (materialEnabled) LiquidGlassOpticsOverlay(shape, settings)
         Box(Modifier.matchParentSize(), propagateMinConstraints = true, content = content)
         if (border != null) Box(Modifier.matchParentSize().border(border, shape))
+    }
+}
+
+@Composable
+internal fun liquidGlassTintColor(
+    fallbackColor: Color,
+    role: LiquidGlassRole = LiquidGlassRole.CONTROL,
+): Color {
+    val settings = LocalLiquidGlassSettings.current
+    if (!settings.enabledFor(role)) return fallbackColor
+    val alpha = (fallbackColor.alpha * settings.tintAlpha / 35f).coerceIn(0f, 1f)
+    return if (settings.followPaletteTint) {
+        fallbackColor.copy(alpha = alpha)
+    } else {
+        Color(
+            red = settings.tintRed / 255f,
+            green = settings.tintGreen / 255f,
+            blue = settings.tintBlue / 255f,
+            alpha = alpha,
+        )
     }
 }
 
