@@ -157,9 +157,18 @@ private class MiuiPassBlurBackdropView(context: Context) : View(context) {
             MiuiPassBlurBridge.clear(this)
             blurActive = false
             attempts = 0
-        } else if (isAttachedToWindow && (radiusChanged || requestChanged)) {
+        } else if (isAttachedToWindow && requestChanged) {
             blurActive = MiuiPassBlurBridge.apply(this, blurRadiusPx)
             if (!blurActive) scheduleActivation()
+        } else if (isAttachedToWindow && radiusChanged) {
+            if (blurActive) {
+                if (!MiuiPassBlurBridge.repairRadius(this, blurRadiusPx)) {
+                    blurActive = false
+                    scheduleActivation()
+                }
+            } else {
+                scheduleActivation()
+            }
         }
         invalidate()
     }
