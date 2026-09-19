@@ -22,7 +22,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 
-internal enum class CustomizationPage { OVERVIEW, WALLPAPER, HOME, GESTURES, BACKUP, HELP }
+internal enum class CustomizationPage { OVERVIEW, WALLPAPER, GLASS, HOME, GESTURES, BACKUP, HELP }
 
 @Composable
 internal fun CustomizationSheet(state: LauncherState, initiallyWide: Boolean, model: LauncherModel,
@@ -39,6 +39,7 @@ internal fun CustomizationSheet(state: LauncherState, initiallyWide: Boolean, mo
     val title = when (page) {
         CustomizationPage.OVERVIEW -> "Make it yours"
         CustomizationPage.WALLPAPER -> "Wallpaper & appearance"
+        CustomizationPage.GLASS -> "Liquid glass"
         CustomizationPage.HOME -> "Home layout"
         CustomizationPage.GESTURES -> "Gestures & search"
         CustomizationPage.BACKUP -> "Backup"
@@ -65,6 +66,9 @@ internal fun CustomizationSheet(state: LauncherState, initiallyWide: Boolean, mo
                     CustomizationDestination(Icons.Rounded.Wallpaper, "Wallpaper & appearance",
                         if (backgrounds.previewPending) "Photo ready to review" else "Background, colors, and light",
                         "customization-wallpaper") { onPage(CustomizationPage.WALLPAPER) }
+                    CustomizationDestination(Icons.Rounded.BlurOn, "Liquid glass",
+                        "MIUI PassBlur, material, tint, edge light, and per-surface controls",
+                        "customization-glass") { onPage(CustomizationPage.GLASS) }
                     CustomizationDestination(Icons.Rounded.GridView, "Home layout",
                         "Icons, spacing, dock, and widgets", "customization-home") { onPage(CustomizationPage.HOME) }
                     CustomizationDestination(Icons.Rounded.Search, "Gestures & search",
@@ -108,6 +112,7 @@ internal fun CustomizationSheet(state: LauncherState, initiallyWide: Boolean, mo
                     HorizontalDivider(Modifier.padding(vertical = 6.dp))
                     AppearanceSettings(appearance, onAppearanceMode, onAppearanceManual, onAppearanceDeviceLocation, onAppearanceClear)
                 }
+                CustomizationPage.GLASS -> LiquidGlassSettingsPanel()
                 CustomizationPage.HOME -> HomeLayoutSettings(state, wide, { wide = it }, model, homePage,
                     onEditPins, onWidget, onAddWidget, onRemoveWidget)
                 CustomizationPage.GESTURES -> {

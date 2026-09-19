@@ -574,13 +574,14 @@ fun LauncherScreen(
                             if (contentHeight < 500.dp) 0f else 23f).coerceAtLeast(0f)
                     },
                 compact = contentHeight < 500.dp, iconSize = dockIconSize(geometry.iconSize).dp)
-            Surface(Modifier.align(Alignment.TopEnd).padding(end = 12.dp).offset(y = geometry.dockTop.dp)
-                .width(preset.dockWidth.dp).height(geometry.dockHeight.dp).graphicsLayer {
-                    // Composite the stationary dock independently of the shared pager layer.
-                    compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen
-                }.testTag("dock"),
-                shape = RoundedCornerShape(30.dp), color = Glass.copy(alpha = .32f),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = .3f))) {
+            LiquidGlassSurface(
+                Modifier.align(Alignment.TopEnd).padding(end = 12.dp).offset(y = geometry.dockTop.dp)
+                    .width(preset.dockWidth.dp).height(geometry.dockHeight.dp).testTag("dock"),
+                shape = RoundedCornerShape(30.dp),
+                fallbackColor = Glass.copy(alpha = .32f),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = .3f)),
+                role = LiquidGlassRole.DOCK,
+            ) {
                 Column(Modifier.padding(vertical = 8.dp).verticalScroll(dockScroll)) {
                     DockAppColumn(state.dock, previewLayout.dock, appsById, geometry.dockRowHeight,
                         dockIconSize(geometry.iconSize), drag, insertionTarget,
@@ -871,7 +872,7 @@ fun LauncherScreen(
                             }
                         } else Modifier)) {
                         Row(Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 8.dp)
-                            .background(Glass.copy(alpha = .97f), RoundedCornerShape(22.dp))
+                            .background(liquidGlassTintColor(Glass.copy(alpha = .97f), LiquidGlassRole.TRANSIENT), RoundedCornerShape(22.dp))
                             .testTag("widget-placement-toolbar"), verticalAlignment = Alignment.CenterVertically) {
                             TextButton(onClick = widgetPickerBack) { Text("Back to widgets") }
                             if (session.candidate != null) Text("Replace here", color = Ink,
@@ -920,7 +921,7 @@ fun LauncherScreen(
                             Surface(Modifier.offset { IntOffset(previewX.roundToInt(), anchor.top.roundToInt()) }
                                 .size(previewWidth, previewHeight).testTag("widget-placement-preview")
                                 .semantics { stateDescription = if (widgetDraft != null) "Ready to place" else "No room here" },
-                                color = if (widgetDraft != null) Glass.copy(alpha = .82f) else Color(0xFFE7B6B6).copy(alpha = .9f),
+                                color = if (widgetDraft != null) liquidGlassTintColor(Glass.copy(alpha = .82f), LiquidGlassRole.TRANSIENT) else Color(0xFFE7B6B6).copy(alpha = .9f),
                                 shape = RoundedCornerShape(24.dp), border = androidx.compose.foundation.BorderStroke(3.dp,
                                     if (widgetDraft != null) Color.White else Color(0xFFFF6B6B))) {
                                 Box(Modifier.fillMaxSize()) {
@@ -982,7 +983,7 @@ fun LauncherScreen(
                 Surface(Modifier.offset { IntOffset((drag.pointer.x - drag.rootOrigin.x - 42.dp.toPx()).roundToInt(),
                     (drag.pointer.y - drag.rootOrigin.y - 52.dp.toPx()).roundToInt()) }.size(84.dp)
                     .shadow(16.dp, RoundedCornerShape(20.dp)).testTag("folder-drag-ghost"),
-                    color = Glass.copy(alpha = .96f), shape = RoundedCornerShape(20.dp)) {
+                    color = liquidGlassTintColor(Glass.copy(alpha = .96f), LiquidGlassRole.TRANSIENT), shape = RoundedCornerShape(20.dp)) {
                     Box(contentAlignment = Alignment.Center) { Text(folder.title, color = Ink, textAlign = TextAlign.Center) }
                 }
             }
@@ -992,7 +993,7 @@ fun LauncherScreen(
                 val y = with(LocalDensity.current) { height.toPx() }
                 Surface(Modifier.offset { IntOffset((drag.pointer.x - x / 2).roundToInt(), (drag.pointer.y - y * .65f).roundToInt()) }
                     .size(width, height).shadow(16.dp, RoundedCornerShape(24.dp)).testTag("drag-ghost"),
-                    color = Glass.copy(alpha = .95f), shape = RoundedCornerShape(24.dp)) {
+                    color = liquidGlassTintColor(Glass.copy(alpha = .95f), LiquidGlassRole.TRANSIENT), shape = RoundedCornerShape(24.dp)) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(Icons.Rounded.Widgets, null, tint = Ink)
                         Spacer(Modifier.height(8.dp))
@@ -1003,7 +1004,7 @@ fun LauncherScreen(
             if (blockedDock) Surface(
                 Modifier.align(Alignment.TopCenter).statusBarsPadding()
                     .padding(top = 10.dp, start = 20.dp, end = 100.dp),
-                color = Glass.copy(alpha = .96f), shape = RoundedCornerShape(18.dp)
+                color = liquidGlassTintColor(Glass.copy(alpha = .96f), LiquidGlassRole.TRANSIENT), shape = RoundedCornerShape(18.dp)
             ) {
                 Text("Dock full • Move an app out first",
                     Modifier.padding(horizontal = 16.dp, vertical = 12.dp), color = Ink, fontSize = 13.sp)
@@ -1015,7 +1016,7 @@ fun LauncherScreen(
                 Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(end = 12.dp, bottom = 12.dp)
                     .width((if (expandedWorkspace) state.expanded else state.compact).dockWidth.dp).height(64.dp)
                     .dropRegion(drag, DropTarget.Remove).testTag("remove-drop-target"),
-                color = if (target == DropTarget.Remove) Color(0xFFB33B3B) else Glass.copy(alpha = .96f), shape = RoundedCornerShape(24.dp)) {
+                color = if (target == DropTarget.Remove) Color(0xFFB33B3B) else liquidGlassTintColor(Glass.copy(alpha = .96f), LiquidGlassRole.TRANSIENT), shape = RoundedCornerShape(24.dp)) {
                 Column(Modifier.fillMaxSize().padding(vertical = 6.dp), verticalArrangement = Arrangement.Center,
                     horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Rounded.DeleteOutline, null)
@@ -1062,7 +1063,7 @@ fun LauncherScreen(
                         Icon(Icons.Rounded.OpenInFull, "Drag to resize widget", tint = Ink, modifier = Modifier.size(22.dp))
                     }
                     Row(Modifier.align(Alignment.TopCenter).padding(top = 8.dp)
-                        .background(Glass.copy(alpha = .96f), RoundedCornerShape(20.dp))) {
+                        .background(liquidGlassTintColor(Glass.copy(alpha = .96f), LiquidGlassRole.TRANSIENT), RoundedCornerShape(20.dp))) {
                         TextButton(onClick = { resizeSlot = null }) { Text("Cancel") }
                         TextButton(enabled = valid, onClick = {
                             model.resizeWidget(slot, resizeWidth, resizeHeight); resizeSlot = null
@@ -1406,9 +1407,16 @@ private fun HomePagePane(
 @Composable
 private fun CircleControl(icon: ImageVector, label: String, tag: String, visualSize: Dp, action: () -> Unit) {
     IconButton(onClick = action, modifier = Modifier.size(visualSize.coerceAtLeast(48.dp)).testTag(tag)) {
-        Box(Modifier.size(visualSize).testTag("$tag-visual").background(Glass.copy(alpha = .22f), CircleShape)
-            .border(1.dp, Color.White.copy(alpha = .25f), CircleShape), contentAlignment = Alignment.Center) {
-            Icon(icon, label, tint = Color.White, modifier = Modifier.size(22.dp))
+        LiquidGlassTintSurface(
+            Modifier.size(visualSize).testTag("$tag-visual"),
+            shape = CircleShape,
+            fallbackColor = Glass.copy(alpha = .22f),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = .25f)),
+            role = LiquidGlassRole.CONTROL,
+        ) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Icon(icon, label, tint = Color.White, modifier = Modifier.size(22.dp))
+            }
         }
     }
 }
@@ -1483,13 +1491,13 @@ private fun SharedHomeGrid(
                 .dropRegion(drag, cell, savedApp?.id ?: savedFolder?.id, page)
                 .combinedClickable(onClick = { savedFolder?.let { onFolder(it.id) } },
                     onLongClick = { if (savedId == null && !drag.active) onEmptyWidget(globalIndex) })
-                .background(if (highlighted) Glass.copy(alpha = .25f) else Color.Transparent, RoundedCornerShape(16.dp))
+                .background(if (highlighted) liquidGlassTintColor(Glass.copy(alpha = .25f), LiquidGlassRole.TRANSIENT) else Color.Transparent, RoundedCornerShape(16.dp))
                 .border(if (highlighted) 2.dp else 0.dp,
                     if (highlighted) Color.White.copy(alpha = .8f) else Color.Transparent, RoundedCornerShape(16.dp)),
                 contentAlignment = Alignment.TopCenter) {
                 if (drag.active && drag.source?.appId != null && (gap || previewId == null)) Box(
                     Modifier.size(iconSize.dp).testTag(if (gap) "drag-gap-home-$globalIndex" else "empty-home-slot-$globalIndex")
-                        .background(Glass.copy(alpha = if (gap) .16f else .08f), RoundedCornerShape(18.dp))
+                        .background(liquidGlassTintColor(Glass.copy(alpha = if (gap) .16f else .08f), LiquidGlassRole.TRANSIENT), RoundedCornerShape(18.dp))
                         .border(if (gap) 2.dp else 1.dp, Color.White.copy(alpha = if (gap) .55f else .3f), RoundedCornerShape(18.dp)))
             }
         }
@@ -1538,11 +1546,16 @@ private fun SharedHomeGrid(
                 val width = (cellWidth * placement.spanX - 10.dp).coerceAtLeast(1.dp)
                 val y = rowTop(placement.row)
                 val height = (rowTop(placement.row + placement.spanY) - y - 18f).coerceAtLeast(48f)
-                if (placement == pending) Surface(Modifier.offset(x = x, y = y.dp).width(width).height(height.dp)
-                    .testTag("widget-pending-${placement.slot}").semantics(mergeDescendants = true) {
-                        contentDescription = "Pending ${widgets.pendingProvider?.shortClassName ?: "widget"}"
-                    }, color = Glass.copy(alpha = .72f),
-                    shape = RoundedCornerShape(24.dp), border = androidx.compose.foundation.BorderStroke(2.dp, Color.White)) {
+                if (placement == pending) LiquidGlassSurface(
+                    Modifier.offset(x = x, y = y.dp).width(width).height(height.dp)
+                        .testTag("widget-pending-${placement.slot}").semantics(mergeDescendants = true) {
+                            contentDescription = "Pending ${widgets.pendingProvider?.shortClassName ?: "widget"}"
+                        },
+                    fallbackColor = Glass.copy(alpha = .72f),
+                    shape = RoundedCornerShape(24.dp),
+                    border = androidx.compose.foundation.BorderStroke(2.dp, Color.White),
+                    role = LiquidGlassRole.WIDGET,
+                ) {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.Center,
                         horizontalAlignment = Alignment.CenterHorizontally) {
                         CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 3.dp)
@@ -1599,7 +1612,7 @@ private fun DockAppColumn(
                 contentAlignment = Alignment.Center) {
                 when {
                     gap -> Box(Modifier.size(iconSize.dp).testTag("drag-gap-dock-$index")
-                        .background(Glass.copy(alpha = .16f), RoundedCornerShape(14.dp))
+                        .background(liquidGlassTintColor(Glass.copy(alpha = .16f), LiquidGlassRole.TRANSIENT), RoundedCornerShape(14.dp))
                         .border(2.dp, Color.White.copy(alpha = .55f), RoundedCornerShape(14.dp)))
                     previewId == null -> Icon(Icons.Rounded.Add, null, tint = Color.White, modifier = Modifier.size(24.dp))
                 }
@@ -1648,10 +1661,15 @@ private fun FolderTile(folder: FolderEntry, apps: Map<String, AppEntry>, size: F
     Column(modifier.clickable(onClick = onClick).semantics(mergeDescendants = true) {
         contentDescription = "Folder ${folder.title}, ${folder.appIds.size} apps"
     }, horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(Modifier.size(size.dp).clip(RoundedCornerShape((size * .24f).dp))
-            .background(Glass.copy(alpha = .72f)).border(1.dp, Color.White.copy(alpha = .55f), RoundedCornerShape((size * .24f).dp))
-            .dropRegion(drag, DropTarget.Folder(folder.id), page = page, folderId = folder.id)
-            .testTag("folder-drop-${folder.id}")) {
+        LiquidGlassTintSurface(
+            Modifier.size(size.dp)
+                .dropRegion(drag, DropTarget.Folder(folder.id), page = page, folderId = folder.id)
+                .testTag("folder-drop-${folder.id}"),
+            shape = RoundedCornerShape((size * .24f).dp),
+            fallbackColor = Glass.copy(alpha = .72f),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = .55f)),
+            role = LiquidGlassRole.FOLDER,
+        ) {
             folder.appIds.take(4).forEachIndexed { index, id ->
                 apps[id]?.let { app ->
                     Image(app.icon.asImageBitmap(), null, Modifier.align(when (index) {
@@ -1687,9 +1705,14 @@ private fun AppTile(app: AppEntry, size: Float, labels: Boolean, modifier: Modif
 
 @Composable
 private fun GlassCard(modifier: Modifier = Modifier, onClick: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
-    Surface(modifier.fillMaxSize().clip(RoundedCornerShape(24.dp)).clickable(onClick = onClick),
-        color = Glass.copy(alpha = .24f), shape = RoundedCornerShape(24.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = .18f))) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.SpaceBetween, content = content)
+    LiquidGlassSurface(
+        modifier.fillMaxSize().clickable(onClick = onClick),
+        shape = RoundedCornerShape(24.dp),
+        fallbackColor = Glass.copy(alpha = .24f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = .18f)),
+        role = LiquidGlassRole.CARD,
+    ) {
+        Column(Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.SpaceBetween, content = content)
     }
 }
 
@@ -1747,8 +1770,13 @@ private fun WidgetSlot(id: Int, slot: Int, controller: WidgetController, modifie
         val displayedContentSize = WidgetContentSize(maxWidth.value, maxHeight.value)
         if (id == NEEDS_BINDING_WIDGET) {
             val restore = controller.restoreDescriptor(slot)
-            Surface(Modifier.fillMaxSize().testTag("widget-restore-$slot"), color = Glass.copy(alpha = .88f),
-                shape = RoundedCornerShape(24.dp), border = androidx.compose.foundation.BorderStroke(2.dp, Color.White.copy(alpha = .7f))) {
+            LiquidGlassSurface(
+                Modifier.fillMaxSize().testTag("widget-restore-$slot"),
+                fallbackColor = Glass.copy(alpha = .88f),
+                shape = RoundedCornerShape(24.dp),
+                border = androidx.compose.foundation.BorderStroke(2.dp, Color.White.copy(alpha = .7f)),
+                role = LiquidGlassRole.WIDGET,
+            ) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.Center,
                     horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(restore?.title ?: "Saved widget", color = Ink, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
@@ -1804,8 +1832,13 @@ private fun MovableWidget(id: Int, slot: Int, controller: WidgetController, drag
                 Text("Your widgets", color = Color.White, fontSize = 15.sp, maxLines = 1)
                 Text("Tap to choose", color = Color.White.copy(alpha = .8f), fontSize = 12.sp)
             }
-            else -> Surface(Modifier.fillMaxSize().clickable(onClick = onAdd), color = Glass.copy(alpha = .18f),
-                shape = RoundedCornerShape(24.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = .25f))) {
+            else -> LiquidGlassSurface(
+                Modifier.fillMaxSize().clickable(onClick = onAdd),
+                fallbackColor = Glass.copy(alpha = .18f),
+                shape = RoundedCornerShape(24.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = .25f)),
+                role = LiquidGlassRole.WIDGET,
+            ) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Rounded.Add, null, tint = Color.White)
                     Text(if (id >= 0) "Widget unavailable" else "Add widget", color = Color.White, fontSize = 12.sp)

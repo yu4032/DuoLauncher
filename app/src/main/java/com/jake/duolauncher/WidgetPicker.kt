@@ -161,7 +161,7 @@ internal fun WidgetProviderPreview(entry: WidgetCatalogEntry, span: WidgetSpan, 
     val preview by produceState<CatalogPreview?>(null, entry.provider, span, context.resources.displayMetrics.densityDpi) {
         value = loadWidgetPreview(context, entry.provider, span)
     }
-    Box(modifier.background(Glass.copy(alpha = .38f)), contentAlignment = Alignment.Center) {
+    Box(modifier.background(liquidGlassTintColor(Glass.copy(alpha = .38f), LiquidGlassRole.WIDGET)), contentAlignment = Alignment.Center) {
         when (val value = preview) {
             is CatalogPreview.Remote -> AndroidView(factory = { previewContext ->
                 object : android.widget.FrameLayout(previewContext) {
@@ -214,10 +214,14 @@ internal fun VisualWidgetPicker(
         words.isEmpty() || listOf(entry.appLabel, entry.providerLabel, entry.description,
             entry.provider.provider.packageName).any { it.lowercase().contains(words) }
     } }
-    Surface(Modifier.fillMaxSize().alpha(if (hiddenForDrag) 0f else 1f)
-        .then(if (hiddenForDrag) Modifier.clearAndSetSemantics { }.focusProperties { canFocus = false } else Modifier)
-        .testTag("visual-widget-picker"),
-        color = Glass.copy(alpha = .96f)) {
+    LiquidGlassSurface(
+        Modifier.fillMaxSize().alpha(if (hiddenForDrag) 0f else 1f)
+            .then(if (hiddenForDrag) Modifier.clearAndSetSemantics { }.focusProperties { canFocus = false } else Modifier)
+            .testTag("visual-widget-picker"),
+        shape = RoundedCornerShape(0.dp),
+        fallbackColor = Glass.copy(alpha = .96f),
+        role = LiquidGlassRole.PANEL,
+    ) {
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 18.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onBack) { Icon(Icons.Rounded.ArrowBack, "Back") }
@@ -253,10 +257,14 @@ internal fun VisualWidgetPicker(
                         modifier = Modifier.padding(top = 10.dp, start = 4.dp)) }
                     items(listOf(CLOCK_WIDGET to "Clock", DATE_WIDGET to "Date", INFO_WIDGET to "Widget panel"),
                         key = { "builtin-${it.first}" }) { (id, label) ->
-                        Surface(Modifier.fillMaxWidth().testTag("widget-builtin-$id")
-                            .clickable { focusManager.clearFocus(); keyboard?.hide(); onBuiltin(id) },
-                            color = Glass.copy(alpha = .55f), border = BorderStroke(1.dp, Color.White.copy(alpha = .55f)),
-                            shape = RoundedCornerShape(22.dp)) {
+                        LiquidGlassTintSurface(
+                            Modifier.fillMaxWidth().testTag("widget-builtin-$id")
+                                .clickable { focusManager.clearFocus(); keyboard?.hide(); onBuiltin(id) },
+                            fallbackColor = Glass.copy(alpha = .55f),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = .55f)),
+                            shape = RoundedCornerShape(22.dp),
+                            role = LiquidGlassRole.CARD,
+                        ) {
                             Column(Modifier.padding(16.dp)) {
                                 Text(label, style = MaterialTheme.typography.titleMedium)
                                 Text("2 × 2 · Tap to place", style = MaterialTheme.typography.labelMedium)
@@ -270,23 +278,26 @@ internal fun VisualWidgetPicker(
                     items(group, key = { it.provider.provider.flattenToString() }) { entry ->
                         val span = footprint(entry.provider)
                         var origin by remember { mutableStateOf(Offset.Zero) }
-                        Surface(modifier = Modifier.fillMaxWidth()
-                            .testTag("widget-provider-${entry.provider.provider.flattenToString()}${if (entry.isWork) "-profile-${entry.userSerial}" else ""}")
-                            .onGloballyPositioned { origin = it.boundsInRoot().topLeft }
-                            .pointerInput(entry.provider) {
-                                detectDragGesturesAfterLongPress(
-                                    onDragStart = { point ->
-                                        focusManager.clearFocus(); keyboard?.hide()
-                                        latestDragStart(entry.provider, origin + point)
-                                    },
-                                    onDrag = { change, _ -> change.consume(); latestDrag(origin + change.position) },
-                                    onDragEnd = { latestDrop() }, onDragCancel = { latestCancelDrag() })
-                            }.clickable(enabled = span != null, onClick = {
-                                focusManager.clearFocus(); keyboard?.hide(); onTap(entry.provider)
-                            }),
-                            color = Glass.copy(alpha = .55f),
+                        LiquidGlassTintSurface(
+                            modifier = Modifier.fillMaxWidth()
+                                .testTag("widget-provider-${entry.provider.provider.flattenToString()}${if (entry.isWork) "-profile-${entry.userSerial}" else ""}")
+                                .onGloballyPositioned { origin = it.boundsInRoot().topLeft }
+                                .pointerInput(entry.provider) {
+                                    detectDragGesturesAfterLongPress(
+                                        onDragStart = { point ->
+                                            focusManager.clearFocus(); keyboard?.hide()
+                                            latestDragStart(entry.provider, origin + point)
+                                        },
+                                        onDrag = { change, _ -> change.consume(); latestDrag(origin + change.position) },
+                                        onDragEnd = { latestDrop() }, onDragCancel = { latestCancelDrag() })
+                                }.clickable(enabled = span != null, onClick = {
+                                    focusManager.clearFocus(); keyboard?.hide(); onTap(entry.provider)
+                                }),
+                            fallbackColor = Glass.copy(alpha = .55f),
                             border = BorderStroke(1.dp, Color.White.copy(alpha = .55f)),
-                            shape = RoundedCornerShape(22.dp)) {
+                            shape = RoundedCornerShape(22.dp),
+                            role = LiquidGlassRole.CARD,
+                        ) {
                             Column(Modifier.fillMaxWidth().padding(14.dp)) {
                                 Column(Modifier.padding(bottom = 12.dp)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {

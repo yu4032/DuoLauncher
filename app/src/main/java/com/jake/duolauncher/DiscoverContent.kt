@@ -27,9 +27,13 @@ internal fun DiscoverContent(modifier: Modifier = Modifier) {
     Box(modifier.testTag("discover-page")) {
         // The healthy native feed moves above this page. Keep its backing page transparent
         // so the retained Home layer is revealed during entry and exit, not an empty glass card.
-        if (showMessage && message != null) Surface(Modifier.fillMaxSize().testTag("discover-recovery-surface"),
-            shape = RoundedCornerShape(30.dp), color = Glass.copy(alpha = .92f),
-            border = BorderStroke(1.dp, Color.White.copy(alpha = .5f))) {
+        if (showMessage && message != null) LiquidGlassSurface(
+            Modifier.fillMaxSize().testTag("discover-recovery-surface"),
+            shape = RoundedCornerShape(30.dp),
+            fallbackColor = Glass.copy(alpha = .92f),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = .5f)),
+            role = LiquidGlassRole.PANEL,
+        ) {
             Column(Modifier.fillMaxSize().padding(32.dp),
                 verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("Discover", style = MaterialTheme.typography.headlineMedium)
