@@ -70,7 +70,8 @@ internal fun AppLibrary(
         role = LiquidGlassRole.PANEL,
         enabled = glass,
     ) {
-        Column(Modifier.background(Brush.verticalGradient(if (glass)
+        CompositionLocalProvider(LocalContentColor provides ink) {
+            Column(Modifier.background(Brush.verticalGradient(if (glass)
             listOf(Color.White.copy(alpha = .09f), Color.Transparent) else listOf(Color.Transparent, Color.Transparent)))
             .padding(horizontal = 16.dp).padding(top = 18.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -137,6 +138,7 @@ internal fun AppLibrary(
                         }
                     }
                 }
+            }
             }
         }
     }
