@@ -5,23 +5,29 @@ import android.graphics.drawable.ColorDrawable
 import android.util.Log
 import android.view.View
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import java.lang.reflect.Method
+import kotlin.math.abs
 
 /**
- * Small cached bridge around HyperOS/MIUI's per-View pass-window blur APIs.
+ * Cached bridge around HyperOS/MIUI's per-View pass-window blur APIs.
  *
- * Duo stays a normal launcher app: there is no Xposed dependency here and no package-private
- * Launcher class access. Unsupported ROMs simply retain the original translucent material.
+ * This stays dependency-free and fails closed on non-MIUI builds. Radius repair is deliberately
+ * separate from full activation: HyperOS may rewrite the backdrop radius while HOME/RECENTS
+ * changes authority, and replaying every vendor flag during that transition is unnecessarily
+ * destructive.
  */
 private object MiuiPassBlurBridge {
     private val setPassWindowBlurEnabled: Method?
@@ -44,7 +50,7 @@ private object MiuiPassBlurBridge {
             backgroundRadius = View::class.java.getMethod("setMiBackgroundBlurRadius", Int::class.javaPrimitiveType)
             passAvailable = true
         } catch (_: Throwable) {
-            // Non-MIUI and older builds use the translucent fallback.
+            // Non-MIUI and older builds retain Duo's translucent fallback.
         }
         setPassWindowBlurEnabled = passEnabled
         setMiViewBlurMode = viewMode
@@ -71,6 +77,16 @@ private object MiuiPassBlurBridge {
         }
     }
 
+    fun repairRadius(view: View, radiusPx: Int): Boolean {
+        if (!available) return false
+        return try {
+            val result = setMiBackgroundBlurRadius!!.invoke(view, radiusPx.coerceIn(0, 400))
+            result !is Boolean || result
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
     fun clear(view: View) {
         if (!available) return
         runCatching { setPassWindowBlurEnabled!!.invoke(view, false) }
@@ -81,16 +97,14 @@ private object MiuiPassBlurBridge {
 }
 
 /**
- * A dedicated RenderNode for MIUI backdrop blur.
- *
- * Pass-window blur can reject the first request before the View has a valid ViewRoot, so attachment
- * retries are bounded to a few animation frames. The original Duo translucent fill remains the
- * exact fallback and is replaced by only a light tint once compositor blur is active.
+ * Dedicated RenderNode for MIUI backdrop blur. It owns no interaction and never becomes an
+ * accessibility node. The Compose host owns shape, optics, content, and the final sharp edge.
  */
 private class MiuiPassBlurBackdropView(context: Context) : View(context) {
     private var blurRadiusPx = DEFAULT_BLUR_RADIUS_PX
     private var fallbackColor = 0
     private var activeTintColor = 0
+    private var passBlurRequested = true
     private var blurActive = false
     private var attempts = 0
     private var unsupportedLogged = false
@@ -99,7 +113,7 @@ private class MiuiPassBlurBackdropView(context: Context) : View(context) {
 
     private val retry = object : Runnable {
         override fun run() {
-            if (!isAttachedToWindow || blurActive || attempts >= MAX_ATTACH_RETRIES) return
+            if (!isAttachedToWindow || blurActive || !passBlurRequested || attempts >= MAX_ATTACH_RETRIES) return
             attempts++
             blurActive = MiuiPassBlurBridge.apply(this@MiuiPassBlurBackdropView, blurRadiusPx)
             if (blurActive && !activeLogged) {
@@ -124,12 +138,26 @@ private class MiuiPassBlurBackdropView(context: Context) : View(context) {
         background = ColorDrawable(android.graphics.Color.TRANSPARENT)
     }
 
-    fun updateMaterial(radiusPx: Int, fallbackArgb: Int, activeTintArgb: Int) {
-        val radiusChanged = blurRadiusPx != radiusPx
-        blurRadiusPx = radiusPx.coerceIn(0, 400)
+    fun updateMaterial(
+        radiusPx: Int,
+        fallbackArgb: Int,
+        activeTintArgb: Int,
+        requestPassBlur: Boolean,
+    ) {
+        val safeRadius = radiusPx.coerceIn(0, 400)
+        val radiusChanged = blurRadiusPx != safeRadius
+        val requestChanged = passBlurRequested != requestPassBlur
+        blurRadiusPx = safeRadius
         fallbackColor = fallbackArgb
         activeTintColor = activeTintArgb
-        if (radiusChanged && isAttachedToWindow) {
+        passBlurRequested = requestPassBlur
+
+        if (!requestPassBlur) {
+            removeCallbacks(retry)
+            MiuiPassBlurBridge.clear(this)
+            blurActive = false
+            attempts = 0
+        } else if (isAttachedToWindow && (radiusChanged || requestChanged)) {
             blurActive = MiuiPassBlurBridge.apply(this, blurRadiusPx)
             if (!blurActive) scheduleActivation()
         }
@@ -149,6 +177,27 @@ private class MiuiPassBlurBackdropView(context: Context) : View(context) {
         super.onDetachedFromWindow()
     }
 
+    override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
+        super.onWindowFocusChanged(hasWindowFocus)
+        if (!hasWindowFocus || !passBlurRequested || !isAttachedToWindow) return
+        if (blurActive) {
+            if (!MiuiPassBlurBridge.repairRadius(this, blurRadiusPx)) {
+                blurActive = false
+                scheduleActivation()
+            }
+        } else {
+            scheduleActivation()
+        }
+    }
+
+    override fun onWindowVisibilityChanged(visibility: Int) {
+        super.onWindowVisibilityChanged(visibility)
+        if (visibility == VISIBLE && passBlurRequested && isAttachedToWindow) {
+            if (blurActive) MiuiPassBlurBridge.repairRadius(this, blurRadiusPx)
+            else scheduleActivation()
+        }
+    }
+
     override fun onDraw(canvas: android.graphics.Canvas) {
         super.onDraw(canvas)
         canvas.drawColor(if (blurActive) activeTintColor else fallbackColor)
@@ -157,6 +206,12 @@ private class MiuiPassBlurBackdropView(context: Context) : View(context) {
     private fun scheduleActivation() {
         removeCallbacks(retry)
         attempts = 0
+        rejectedLogged = false
+        if (!passBlurRequested) {
+            blurActive = false
+            invalidate()
+            return
+        }
         if (!MiuiPassBlurBridge.available) {
             if (!unsupportedLogged) {
                 unsupportedLogged = true
@@ -177,10 +232,12 @@ private class MiuiPassBlurBackdropView(context: Context) : View(context) {
 }
 
 /**
- * Compose material shell backed by MIUI pass-window blur when available.
+ * MIUI-backed glass shell shared by Duo's large surfaces.
  *
- * The AndroidView is deliberately the bottom layer. Compose owns final shape clipping and the
- * sharp border so the compositor blur never softens the edge treatment or child content.
+ * PassBlur supplies only the backdrop material. The Compose overlay deliberately owns tint,
+ * directional light, haze, caustic wash and sharp rims. This mirrors LiquidDock's separation
+ * between the compositor body and the optical/highlight presentation without pretending the
+ * basic View API exposes a UV texture for Prismal refraction.
  */
 @Composable
 internal fun LiquidGlassSurface(
@@ -188,31 +245,158 @@ internal fun LiquidGlassSurface(
     shape: Shape,
     fallbackColor: Color,
     border: BorderStroke? = null,
-    blurRadiusPx: Int = 100,
-    activeTintAlpha: Float = 0.08f,
+    role: LiquidGlassRole = LiquidGlassRole.CARD,
     content: @Composable BoxScope.() -> Unit,
 ) {
-    val tint = fallbackColor.copy(
-        alpha = activeTintAlpha.coerceIn(0f, 1f),
-    )
+    val settings = LocalLiquidGlassSettings.current
+    val materialEnabled = settings.enabledFor(role)
+    val paletteTint = if (settings.followPaletteTint) {
+        fallbackColor.copy(alpha = settings.tintAlpha / 255f)
+    } else {
+        Color(
+            red = settings.tintRed / 255f,
+            green = settings.tintGreen / 255f,
+            blue = settings.tintBlue / 255f,
+            alpha = settings.tintAlpha / 255f,
+        )
+    }
+
     Box(
         modifier = modifier.clip(shape),
         propagateMinConstraints = true,
     ) {
-        AndroidView(
-            factory = { MiuiPassBlurBackdropView(it) },
-            modifier = Modifier.matchParentSize(),
-            update = {
-                it.updateMaterial(
-                    radiusPx = blurRadiusPx,
-                    fallbackArgb = fallbackColor.toArgb(),
-                    activeTintArgb = tint.toArgb(),
-                )
-            },
-        )
+        if (materialEnabled) {
+            AndroidView(
+                factory = { MiuiPassBlurBackdropView(it) },
+                modifier = Modifier.matchParentSize(),
+                update = {
+                    it.updateMaterial(
+                        radiusPx = settings.blurRadiusPx,
+                        fallbackArgb = fallbackColor.toArgb(),
+                        activeTintArgb = paletteTint.toArgb(),
+                        requestPassBlur = settings.passBlurEnabled,
+                    )
+                },
+            )
+            LiquidGlassOpticsOverlay(shape, settings)
+        } else {
+            Box(Modifier.matchParentSize().background(fallbackColor))
+        }
+
         Box(Modifier.matchParentSize(), propagateMinConstraints = true, content = content)
+
         if (border != null) {
             Box(Modifier.matchParentSize().border(border, shape))
+        }
+    }
+}
+
+@Composable
+private fun BoxScope.LiquidGlassOpticsOverlay(
+    shape: Shape,
+    settings: LiquidGlassSettings,
+) {
+    val strength = (settings.highlightAlphaPercent / 100f).coerceIn(0f, 2f)
+    val reflection = (settings.reflectionStrengthPercent / 100f).coerceIn(0f, 2f)
+    val lighten = (settings.reflectionLightenPercent / 100f).coerceIn(0f, 1f)
+    val mainDirectional = (settings.directionalIntensityPercent / 100f).coerceIn(0f, 2f)
+    val oppositeDirectional = (settings.oppositeIntensityPercent / 100f).coerceIn(0f, 2f)
+    val angleSoftness = (settings.directionalAngleRangePercent / 150f).coerceIn(0.03f, 1f)
+    val edgeWidth = (settings.highlightWidthPercent / 100f).coerceIn(.5f, 3f).dp
+
+    if (settings.brightnessPercent != 100) {
+        val delta = (settings.brightnessPercent - 100) / 100f
+        val wash = if (delta > 0f) {
+            Color.White.copy(alpha = (delta * .10f).coerceIn(0f, .10f))
+        } else {
+            Color.Black.copy(alpha = (-delta * .14f).coerceIn(0f, .14f))
+        }
+        Box(Modifier.matchParentSize().background(wash, shape))
+    }
+
+    if (settings.skyHaze) {
+        Box(
+            Modifier.matchParentSize().background(
+                Brush.verticalGradient(
+                    listOf(
+                        Color.White.copy(alpha = (.11f * strength + .03f * lighten).coerceIn(0f, .28f)),
+                        Color.White.copy(alpha = (.025f * strength).coerceIn(0f, .08f)),
+                        Color.Transparent,
+                    )
+                ),
+                shape,
+            )
+        )
+    }
+
+    if (settings.faceSheen) {
+        val horizontal = abs(settings.lightDirXPercent) >= abs(settings.lightDirYPercent)
+        val sheen = listOf(
+            Color.White.copy(alpha = (.07f * strength * reflection).coerceIn(0f, .18f)),
+            Color.Transparent,
+            Color.White.copy(alpha = (.025f * strength * angleSoftness).coerceIn(0f, .08f)),
+        ).let { colors ->
+            val reverse = if (horizontal) settings.lightDirXPercent > 0 else settings.lightDirYPercent > 0
+            if (reverse) colors.reversed() else colors
+        }
+        Box(
+            Modifier.matchParentSize().background(
+                if (horizontal) Brush.horizontalGradient(sheen) else Brush.verticalGradient(sheen),
+                shape,
+            )
+        )
+    }
+
+    if (settings.caustics) {
+        Box(
+            Modifier.matchParentSize().background(
+                Brush.verticalGradient(
+                    listOf(
+                        Color.Transparent,
+                        Color.White.copy(alpha = (.018f * strength * (1f + reflection)).coerceIn(0f, .07f)),
+                        Color.Transparent,
+                    )
+                ),
+                shape,
+            )
+        )
+    }
+
+    val horizontalLight = abs(settings.lightDirXPercent) >= abs(settings.lightDirYPercent)
+    var mainAlpha = .10f * strength * (1f + .45f * reflection) * (1f + .25f * lighten)
+    var oppositeAlpha = .035f * strength * (1f + .35f * reflection)
+    if (!settings.litRim) mainAlpha = 0f
+    if (!settings.oppositeRim) oppositeAlpha = 0f
+    val midAlpha = if (settings.cornerRim) {
+        (.045f * strength * (1f + .45f * angleSoftness)).coerceIn(0f, .14f)
+    } else 0f
+    val baseAlpha = if (settings.plainHighlight) (.035f * strength).coerceIn(0f, .10f) else 0f
+    mainAlpha = (mainAlpha * mainDirectional + baseAlpha).coerceIn(0f, .32f)
+    oppositeAlpha = (oppositeAlpha * oppositeDirectional + baseAlpha).coerceIn(0f, .20f)
+
+    var edgeColors = listOf(
+        Color.White.copy(alpha = mainAlpha),
+        Color.White.copy(alpha = midAlpha),
+        Color.White.copy(alpha = oppositeAlpha),
+    )
+    val reverseEdge = if (horizontalLight) settings.lightDirXPercent > 0 else settings.lightDirYPercent > 0
+    if (reverseEdge) edgeColors = edgeColors.reversed()
+
+    if (edgeColors.any { it.alpha > 0f }) {
+        val brush = if (horizontalLight) Brush.horizontalGradient(edgeColors) else Brush.verticalGradient(edgeColors)
+        Box(Modifier.matchParentSize().border(BorderStroke(edgeWidth, brush), shape))
+    }
+
+    if (settings.specular) {
+        val specularAlpha = (.055f * strength * (1f + reflection) * mainDirectional).coerceIn(0f, .20f)
+        if (specularAlpha > 0f) {
+            Box(
+                Modifier.matchParentSize().border(
+                    BorderStroke((edgeWidth.value * .45f).coerceAtLeast(.35f).dp,
+                        Color.White.copy(alpha = specularAlpha)),
+                    shape,
+                )
+            )
         }
     }
 }
