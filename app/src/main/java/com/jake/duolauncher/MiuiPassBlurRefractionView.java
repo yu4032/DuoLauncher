@@ -13,7 +13,6 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.util.Log;
 import android.view.Surface;
-import android.view.SurfaceControl;
 import android.view.TextureView;
 import android.view.View;
 
@@ -298,19 +297,28 @@ final class MiuiPassBlurRefractionView extends TextureView
     }
 
     private static final class Binding {
-        final SurfaceControl rootSurface;
+        final Object rootSurface;
+        final Class<?> transactionClass;
+        final Method isValid;
         final Method setPassBlurSurface;
         final Method setUpdateTextureFlag;
         final Method setMiBlurWinExc;
+        final Method apply;
+        final Method close;
         final float scale;
         boolean bound = true;
 
-        Binding(SurfaceControl rootSurface, Method setPassBlurSurface,
-                Method setUpdateTextureFlag, Method setMiBlurWinExc, float scale) {
+        Binding(Object rootSurface, Class<?> transactionClass, Method isValid,
+                Method setPassBlurSurface, Method setUpdateTextureFlag,
+                Method setMiBlurWinExc, Method apply, Method close, float scale) {
             this.rootSurface = rootSurface;
+            this.transactionClass = transactionClass;
+            this.isValid = isValid;
             this.setPassBlurSurface = setPassBlurSurface;
             this.setUpdateTextureFlag = setUpdateTextureFlag;
             this.setMiBlurWinExc = setMiBlurWinExc;
+            this.apply = apply;
+            this.close = close;
             this.scale = scale;
         }
     }
@@ -625,30 +633,46 @@ final class MiuiPassBlurRefractionView extends TextureView
 
         Method getSurfaceControl = viewRoot.getClass().getDeclaredMethod("getSurfaceControl");
         getSurfaceControl.setAccessible(true);
-        Object raw = getSurfaceControl.invoke(viewRoot);
-        if (!(raw instanceof SurfaceControl)) return null;
-        SurfaceControl rootSurface = (SurfaceControl) raw;
-        if (!rootSurface.isValid()) return null;
+        Object rootSurface = getSurfaceControl.invoke(viewRoot);
+        if (rootSurface == null) return null;
 
-        Method setPassBlurSurface = SurfaceControl.Transaction.class.getMethod(
-                "SetPassBlurSurface", SurfaceControl.class, Surface.class);
-        Method setUpdateTextureFlag = SurfaceControl.Transaction.class.getMethod(
-                "setUpdateTextureFlag", SurfaceControl.class, boolean.class, float.class);
-        Method setMiBlurWinExc = SurfaceControl.Transaction.class.getMethod(
-                "setMiBlurWinExc", SurfaceControl.class, String[].class);
+        Class<?> surfaceControlClass = Class.forName("android.view.SurfaceControl");
+        Class<?> transactionClass = Class.forName("android.view.SurfaceControl$Transaction");
+        if (!surfaceControlClass.isInstance(rootSurface)) return null;
+
+        Method isValid = surfaceControlClass.getMethod("isValid");
+        if (!Boolean.TRUE.equals(isValid.invoke(rootSurface))) return null;
+
+        Method setPassBlurSurface = transactionClass.getMethod(
+                "SetPassBlurSurface", surfaceControlClass, Surface.class);
+        Method setUpdateTextureFlag = transactionClass.getMethod(
+                "setUpdateTextureFlag", surfaceControlClass, boolean.class, float.class);
+        Method setMiBlurWinExc = transactionClass.getMethod(
+                "setMiBlurWinExc", surfaceControlClass, String[].class);
+        Method apply = transactionClass.getMethod("apply");
+        Method close = null;
+        try {
+            close = transactionClass.getMethod("close");
+        } catch (NoSuchMethodException ignored) {}
 
         String rootName = surfaceName(rootSurface);
         String[] exclusions = new String[] {
                 rootName, "NavigationBar", "StatusBar", "GestureStub"
         };
-        try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
+        Object transaction = transactionClass.getConstructor().newInstance();
+        try {
             setMiBlurWinExc.invoke(transaction, rootSurface, (Object) exclusions);
             setPassBlurSurface.invoke(transaction, rootSurface, producer);
             setUpdateTextureFlag.invoke(transaction, rootSurface, true, scale);
-            transaction.apply();
+            apply.invoke(transaction);
+        } finally {
+            if (close != null) {
+                try { close.invoke(transaction); } catch (Throwable ignored) {}
+            }
         }
-        return new Binding(rootSurface, setPassBlurSurface,
-                setUpdateTextureFlag, setMiBlurWinExc, scale);
+        return new Binding(rootSurface, transactionClass, isValid,
+                setPassBlurSurface, setUpdateTextureFlag, setMiBlurWinExc,
+                apply, close, scale);
     }
 
     private void unbindProducer() {
@@ -656,14 +680,19 @@ final class MiuiPassBlurRefractionView extends TextureView
         binding = null;
         if (current == null || !current.bound) return;
         try {
-            if (current.rootSurface.isValid()) {
-                try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
+            if (Boolean.TRUE.equals(current.isValid.invoke(current.rootSurface))) {
+                Object transaction = current.transactionClass.getConstructor().newInstance();
+                try {
                     current.setPassBlurSurface.invoke(transaction, current.rootSurface, null);
                     current.setUpdateTextureFlag.invoke(
                             transaction, current.rootSurface, false, current.scale);
                     current.setMiBlurWinExc.invoke(
                             transaction, current.rootSurface, (Object) new String[0]);
-                    transaction.apply();
+                    current.apply.invoke(transaction);
+                } finally {
+                    if (current.close != null) {
+                        try { current.close.invoke(transaction); } catch (Throwable ignored) {}
+                    }
                 }
             }
         } catch (Throwable error) {
@@ -830,9 +859,10 @@ final class MiuiPassBlurRefractionView extends TextureView
         renderThread.quitSafely();
     }
 
-    private static String surfaceName(SurfaceControl surface) {
+    private static String surfaceName(Object surface) {
+        if (surface == null) return "";
         try {
-            Method getName = SurfaceControl.class.getDeclaredMethod("getName");
+            Method getName = surface.getClass().getDeclaredMethod("getName");
             getName.setAccessible(true);
             Object value = getName.invoke(surface);
             if (value instanceof String) return (String) value;
