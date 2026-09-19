@@ -85,8 +85,12 @@ private fun FolderChild(
     onLaunch: (AppEntry, android.graphics.Rect?) -> Unit, onMoveOut: (String, DropTarget) -> Unit,
 ) {
     var menu by remember { mutableStateOf(false) }
-    Surface(Modifier.fillMaxWidth().testTag("folder-child-${app.id}"), color = Color.White.copy(alpha = .34f),
-        shape = RoundedCornerShape(18.dp)) {
+    LiquidGlassTintSurface(
+        Modifier.fillMaxWidth().testTag("folder-child-${app.id}"),
+        fallbackColor = Color.White.copy(alpha = .34f),
+        shape = RoundedCornerShape(18.dp),
+        role = LiquidGlassRole.FOLDER,
+    ) {
         Box {
             Column(Modifier.fillMaxWidth().dropRegion(drag, DropTarget.Library(app.id), app.id, page,
                 folderId = folderId, scope = folderId).clickable(enabled = app.available) { onLaunch(app, null) }
