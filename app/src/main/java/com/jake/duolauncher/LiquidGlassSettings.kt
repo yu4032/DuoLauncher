@@ -42,7 +42,7 @@ internal data class LiquidGlassSettings(
     val passBlurEnabled: Boolean = true,
     val refractionEnabled: Boolean = true,
     val refractionCardsEnabled: Boolean = false,
-    val captureScalePercent: Int = 50,
+    val captureScalePercent: Int = 100,
     val refractionStrengthPx: Int = 12,
     val refractionInsetPx: Int = 20,
     val chromatic: Int = 26,
@@ -92,7 +92,7 @@ internal data class LiquidGlassSettings(
 
     fun normalized() = copy(
         blurRadiusPx = blurRadiusPx.coerceIn(0, 400),
-        captureScalePercent = captureScalePercent.coerceIn(25, 100),
+        captureScalePercent = captureScalePercent.coerceIn(50, 100),
         refractionStrengthPx = refractionStrengthPx.coerceIn(0, 80),
         refractionInsetPx = refractionInsetPx.coerceIn(1, 120),
         chromatic = chromatic.coerceIn(0, 80),
@@ -329,7 +329,7 @@ internal fun LiquidGlassSettingsPanel() {
         GlassSettingSlider(
             "Producer capture scale",
             settings.captureScalePercent,
-            25..100,
+            50..100,
             "%",
             settings.enabled && settings.passBlurEnabled && settings.refractionEnabled,
         ) { update(settings.copy(captureScalePercent = it)) }
