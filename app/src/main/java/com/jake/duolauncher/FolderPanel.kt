@@ -57,6 +57,7 @@ internal fun FolderPanel(
             fallbackColor = Glass.copy(alpha = .97f),
             shape = RoundedCornerShape(30.dp),
             border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = .6f)),
+            role = LiquidGlassRole.FOLDER,
         ) {
             Column(Modifier.fillMaxSize().padding(18.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
