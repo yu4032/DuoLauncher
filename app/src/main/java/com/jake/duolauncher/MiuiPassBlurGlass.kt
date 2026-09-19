@@ -447,8 +447,8 @@ private fun BoxScope.LiquidGlassOpticsOverlay(
             Modifier.matchParentSize().background(
                 Brush.verticalGradient(
                     listOf(
-                        Color.White.copy(alpha = (.11f * strength + .03f * lighten).coerceIn(0f, .28f)),
-                        Color.White.copy(alpha = (.025f * strength).coerceIn(0f, .08f)),
+                        Color.White.copy(alpha = (.18f * strength + .05f * lighten).coerceIn(0f, .28f)),
+                        Color.White.copy(alpha = (.045f * strength).coerceIn(0f, .08f)),
                         Color.Transparent,
                     )
                 ),
@@ -460,9 +460,9 @@ private fun BoxScope.LiquidGlassOpticsOverlay(
     if (settings.faceSheen) {
         val horizontal = abs(settings.lightDirXPercent) >= abs(settings.lightDirYPercent)
         val sheen = listOf(
-            Color.White.copy(alpha = (.07f * strength * reflection).coerceIn(0f, .18f)),
+            Color.White.copy(alpha = (.13f * strength * (0.65f + reflection)).coerceIn(0f, .18f)),
             Color.Transparent,
-            Color.White.copy(alpha = (.025f * strength * angleSoftness).coerceIn(0f, .08f)),
+            Color.White.copy(alpha = (.05f * strength * (0.5f + angleSoftness)).coerceIn(0f, .08f)),
         ).let { colors ->
             val reverse = if (horizontal) settings.lightDirXPercent > 0 else settings.lightDirYPercent > 0
             if (reverse) colors.reversed() else colors
@@ -481,7 +481,7 @@ private fun BoxScope.LiquidGlassOpticsOverlay(
                 Brush.verticalGradient(
                     listOf(
                         Color.Transparent,
-                        Color.White.copy(alpha = (.018f * strength * (1f + reflection)).coerceIn(0f, .07f)),
+                        Color.White.copy(alpha = (.035f * strength * (1f + reflection)).coerceIn(0f, .07f)),
                         Color.Transparent,
                     )
                 ),
@@ -491,16 +491,16 @@ private fun BoxScope.LiquidGlassOpticsOverlay(
     }
 
     val horizontalLight = abs(settings.lightDirXPercent) >= abs(settings.lightDirYPercent)
-    var mainAlpha = .10f * strength * (1f + .45f * reflection) * (1f + .25f * lighten)
-    var oppositeAlpha = .035f * strength * (1f + .35f * reflection)
+    var mainAlpha = .19f * strength * (1f + .55f * reflection) * (1f + .30f * lighten)
+    var oppositeAlpha = .065f * strength * (1f + .40f * reflection)
     if (!settings.litRim) mainAlpha = 0f
     if (!settings.oppositeRim) oppositeAlpha = 0f
     val midAlpha = if (settings.cornerRim) {
-        (.045f * strength * (1f + .45f * angleSoftness)).coerceIn(0f, .14f)
+        (.085f * strength * (1f + .50f * angleSoftness)).coerceIn(0f, .24f)
     } else 0f
-    val baseAlpha = if (settings.plainHighlight) (.035f * strength).coerceIn(0f, .10f) else 0f
-    mainAlpha = (mainAlpha * mainDirectional + baseAlpha).coerceIn(0f, .32f)
-    oppositeAlpha = (oppositeAlpha * oppositeDirectional + baseAlpha).coerceIn(0f, .20f)
+    val baseAlpha = if (settings.plainHighlight) (.055f * strength).coerceIn(0f, .16f) else 0f
+    mainAlpha = (mainAlpha * mainDirectional + baseAlpha).coerceIn(0f, .52f)
+    oppositeAlpha = (oppositeAlpha * oppositeDirectional + baseAlpha).coerceIn(0f, .30f)
 
     var edgeColors = listOf(
         Color.White.copy(alpha = mainAlpha),
@@ -513,14 +513,33 @@ private fun BoxScope.LiquidGlassOpticsOverlay(
     if (edgeColors.any { it.alpha > 0f }) {
         val brush = if (horizontalLight) Brush.horizontalGradient(edgeColors) else Brush.verticalGradient(edgeColors)
         Box(Modifier.matchParentSize().border(BorderStroke(edgeWidth, brush), shape))
+
+        // A faint opposing dark hairline is part of the optical boundary, not a generic outline:
+        // it gives the bright rim something to contrast against on white/bright wallpapers.
+        val darkColors = listOf(
+            Color.Transparent,
+            Color.Black.copy(alpha = (.022f * strength * (1f + reflection)).coerceIn(0f, .07f)),
+            Color.Black.copy(alpha = (.07f * strength * (1f + .35f * reflection)).coerceIn(0f, .16f)),
+        ).let { if (reverseEdge) it.reversed() else it }
+        val darkBrush = if (horizontalLight) {
+            Brush.horizontalGradient(darkColors)
+        } else {
+            Brush.verticalGradient(darkColors)
+        }
+        Box(
+            Modifier.matchParentSize().border(
+                BorderStroke((edgeWidth.value * .72f).coerceAtLeast(.7f).dp, darkBrush),
+                shape,
+            )
+        )
     }
 
     if (settings.specular) {
-        val specularAlpha = (.055f * strength * (1f + reflection) * mainDirectional).coerceIn(0f, .20f)
+        val specularAlpha = (.13f * strength * (1f + .75f * reflection) * (.55f + mainDirectional)).coerceIn(0f, .38f)
         if (specularAlpha > 0f) {
             Box(
                 Modifier.matchParentSize().border(
-                    BorderStroke((edgeWidth.value * .45f).coerceAtLeast(.35f).dp,
+                    BorderStroke((edgeWidth.value * .58f).coerceAtLeast(.55f).dp,
                         Color.White.copy(alpha = specularAlpha)),
                     shape,
                 )
