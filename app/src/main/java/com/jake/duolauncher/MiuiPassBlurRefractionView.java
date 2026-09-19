@@ -394,6 +394,7 @@ final class MiuiPassBlurRefractionView extends TextureView
                         int blurRadiusPx, float refractionStrengthPx, float refractionInsetPx,
                         float chromatic, float dispersionR, float dispersionB,
                         float cornerRadiusPx) {
+        int oldCaptureScalePercent = this.captureScalePercent;
         this.requested = enableRefraction;
         this.priority = priority;
         this.captureScalePercent = Math.max(25, Math.min(100, captureScalePercent));
@@ -408,7 +409,17 @@ final class MiuiPassBlurRefractionView extends TextureView
         RefractionAuthority.update(this,
                 enableRefraction && isAttachedToWindow() && getVisibility() == VISIBLE,
                 priority);
-        if (producerActive) requestDraw();
+        if (producerActive && oldCaptureScalePercent != this.captureScalePercent) {
+            post(() -> {
+                if (!authorityOwner || !requested || shuttingDown) return;
+                producerActive = false;
+                unbindProducer();
+                bindAttempts = 0;
+                attemptBindWhenReady();
+            });
+        } else if (producerActive) {
+            requestDraw();
+        }
     }
 
     boolean isProducerActive() {
@@ -768,7 +779,11 @@ final class MiuiPassBlurRefractionView extends TextureView
         } catch (Throwable error) {
             producerActive = false;
             fail("render", error);
-            mainHandler.post(this::attemptBindWhenReady);
+            mainHandler.post(() -> {
+                unbindProducer();
+                bindAttempts = 0;
+                attemptBindWhenReady();
+            });
         }
     }
 
