@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import java.lang.reflect.Method
@@ -281,6 +282,36 @@ internal fun LiquidGlassSurface(
             alpha = settings.tintAlpha / 255f,
         )
     }
+    val refractionEligible = when (role) {
+        LiquidGlassRole.DOCK,
+        LiquidGlassRole.PANEL,
+        LiquidGlassRole.FOLDER,
+        LiquidGlassRole.WIDGET -> true
+        LiquidGlassRole.CARD -> settings.refractionCardsEnabled
+        LiquidGlassRole.CONTROL,
+        LiquidGlassRole.TRANSIENT -> false
+    }
+    val refractionPriority = when (role) {
+        LiquidGlassRole.PANEL -> 60
+        LiquidGlassRole.FOLDER -> 55
+        LiquidGlassRole.WIDGET -> 45
+        LiquidGlassRole.DOCK -> 40
+        LiquidGlassRole.CARD -> 20
+        LiquidGlassRole.CONTROL,
+        LiquidGlassRole.TRANSIENT -> 0
+    }
+    val density = LocalDensity.current
+    val refractionCornerRadiusPx = with(density) {
+        when (role) {
+            LiquidGlassRole.DOCK,
+            LiquidGlassRole.PANEL,
+            LiquidGlassRole.FOLDER -> 30.dp.toPx()
+            LiquidGlassRole.WIDGET,
+            LiquidGlassRole.CARD -> 24.dp.toPx()
+            LiquidGlassRole.CONTROL,
+            LiquidGlassRole.TRANSIENT -> 18.dp.toPx()
+        }
+    }
 
     Box(
         modifier = modifier.clip(shape),
@@ -299,6 +330,27 @@ internal fun LiquidGlassSurface(
                     )
                 },
             )
+            AndroidView(
+                factory = { MiuiPassBlurRefractionView(it) },
+                modifier = Modifier.matchParentSize(),
+                update = {
+                    it.updateMaterial(
+                        enableRefraction = settings.passBlurEnabled &&
+                            settings.refractionEnabled && refractionEligible,
+                        priority = refractionPriority,
+                        captureScalePercent = settings.captureScalePercent,
+                        blurRadiusPx = settings.blurRadiusPx,
+                        refractionStrengthPx = settings.refractionStrengthPx.toFloat(),
+                        refractionInsetPx = settings.refractionInsetPx.toFloat(),
+                        chromatic = settings.chromatic.toFloat(),
+                        dispersionR = settings.dispersionRPercent / 100f,
+                        dispersionB = settings.dispersionBPercent / 100f,
+                        cornerRadiusPx = refractionCornerRadiusPx,
+                    )
+                },
+            )
+            // Refraction is the backdrop body. Keep the optical/highlight presentation above it
+            // so rim/specular/face sheen never get softened by the blur sampler.
             LiquidGlassOpticsOverlay(shape, settings)
         } else {
             Box(Modifier.matchParentSize().background(fallbackColor))
