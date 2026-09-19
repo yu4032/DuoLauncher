@@ -346,6 +346,7 @@ internal fun LiquidGlassSurface(
                         dispersionR = settings.dispersionRPercent / 100f,
                         dispersionB = settings.dispersionBPercent / 100f,
                         cornerRadiusPx = refractionCornerRadiusPx,
+                        tintArgb = paletteTint.toArgb(),
                     )
                 },
             )
