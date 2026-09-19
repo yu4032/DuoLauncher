@@ -293,6 +293,38 @@ internal fun LiquidGlassSurface(
 }
 
 @Composable
+internal fun LiquidGlassTintSurface(
+    modifier: Modifier = Modifier,
+    shape: Shape,
+    fallbackColor: Color,
+    border: BorderStroke? = null,
+    role: LiquidGlassRole = LiquidGlassRole.CONTROL,
+    enabled: Boolean = true,
+    content: @Composable BoxScope.() -> Unit,
+) {
+    val settings = LocalLiquidGlassSettings.current
+    val materialEnabled = enabled && settings.enabledFor(role)
+    val tint = if (materialEnabled && !settings.followPaletteTint) {
+        Color(
+            red = settings.tintRed / 255f,
+            green = settings.tintGreen / 255f,
+            blue = settings.tintBlue / 255f,
+            alpha = maxOf(fallbackColor.alpha, settings.tintAlpha / 255f),
+        )
+    } else {
+        fallbackColor
+    }
+    Box(
+        modifier = modifier.clip(shape).background(tint),
+        propagateMinConstraints = true,
+    ) {
+        if (materialEnabled) LiquidGlassOpticsOverlay(shape, settings)
+        Box(Modifier.matchParentSize(), propagateMinConstraints = true, content = content)
+        if (border != null) Box(Modifier.matchParentSize().border(border, shape))
+    }
+}
+
+@Composable
 private fun BoxScope.LiquidGlassOpticsOverlay(
     shape: Shape,
     settings: LiquidGlassSettings,
