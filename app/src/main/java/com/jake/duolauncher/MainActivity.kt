@@ -14,6 +14,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.SystemBarStyle
 import androidx.activity.viewModels
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.core.view.WindowCompat
@@ -44,6 +45,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var setupExperience: SetupExperience
     private lateinit var status: DeviceStatusMonitor
     private lateinit var appearance: AppearanceStore
+    private lateinit var liquidGlass: LiquidGlassStore
     private var appearanceLocationGeneration = 0
     private var appearancePermissionGeneration = -1
     private var appearanceLocationCancellation: CancellationSignal? = null
@@ -72,6 +74,7 @@ class MainActivity : ComponentActivity() {
         returningFromShadeSettings = savedInstanceState?.getBoolean(SHADE_SETTINGS_PENDING) == true
         val restoreShadeDialog = savedInstanceState?.getBoolean(SHADE_DIALOG_VISIBLE) == true
         appearance = AppearanceStore(this)
+        liquidGlass = LiquidGlassStore(applicationContext)
         enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT))
         widgets = WidgetController(this, model) { active ->
@@ -91,19 +94,24 @@ class MainActivity : ComponentActivity() {
             val state = model.state.collectAsStateWithLifecycle().value
             val deviceStatus = status.state.collectAsStateWithLifecycle().value
             DuoTheme(appearance.state.dark) {
-                LauncherScreen(state, model, widgets, homeRequests.intValue,
-                    onLaunch = { launchApp(it) }, onMakeDefault = ::makeDefault, onAppInfo = ::appInfo,
-                    isDefaultHome = defaultHome.value, deviceStatus = deviceStatus, onStatusMode = ::setStatusMode, onWallpaperPreview = ::previewWallpaper,
-                    onDiscover = ::openDiscover, searchRequests = searchRequests.intValue,
-                    onLaunchFrom = ::launchApp, onGoogleSearch = ::openGoogleSearch,
-                    appearance = appearance.state,
-                    onAppearanceMode = { cancelAppearanceLocation(); appearance.setMode(it, systemDark()) },
-                    onAppearanceManual = { place, lat, lon -> cancelAppearanceLocation(); appearance.setManual(place, lat, lon, systemDark()) },
-                    onAppearanceDeviceLocation = ::useAppearanceLocation,
-                    onAppearanceClear = { cancelAppearanceLocation(); appearance.clearLocation(systemDark()) },
-                    showFirstRun = showFirstRun.value,
-                    onFinishFirstRun = ::finishFirstRun,
-                    onShadeSetup = ::showShadeSetup)
+                CompositionLocalProvider(
+                    LocalLiquidGlassSettings provides liquidGlass.state,
+                    LocalLiquidGlassUpdate provides liquidGlass::set,
+                ) {
+                    LauncherScreen(state, model, widgets, homeRequests.intValue,
+                        onLaunch = { launchApp(it) }, onMakeDefault = ::makeDefault, onAppInfo = ::appInfo,
+                        isDefaultHome = defaultHome.value, deviceStatus = deviceStatus, onStatusMode = ::setStatusMode, onWallpaperPreview = ::previewWallpaper,
+                        onDiscover = ::openDiscover, searchRequests = searchRequests.intValue,
+                        onLaunchFrom = ::launchApp, onGoogleSearch = ::openGoogleSearch,
+                        appearance = appearance.state,
+                        onAppearanceMode = { cancelAppearanceLocation(); appearance.setMode(it, systemDark()) },
+                        onAppearanceManual = { place, lat, lon -> cancelAppearanceLocation(); appearance.setManual(place, lat, lon, systemDark()) },
+                        onAppearanceDeviceLocation = ::useAppearanceLocation,
+                        onAppearanceClear = { cancelAppearanceLocation(); appearance.clearLocation(systemDark()) },
+                        showFirstRun = showFirstRun.value,
+                        onFinishFirstRun = ::finishFirstRun,
+                        onShadeSetup = ::showShadeSetup)
+                }
             }
         }
         FoldRenderExperiment.attach(this)
