@@ -246,10 +246,11 @@ internal fun LiquidGlassSurface(
     fallbackColor: Color,
     border: BorderStroke? = null,
     role: LiquidGlassRole = LiquidGlassRole.CARD,
+    enabled: Boolean = true,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val settings = LocalLiquidGlassSettings.current
-    val materialEnabled = settings.enabledFor(role)
+    val materialEnabled = enabled && settings.enabledFor(role)
     val paletteTint = if (settings.followPaletteTint) {
         fallbackColor.copy(alpha = settings.tintAlpha / 255f)
     } else {
