@@ -260,6 +260,17 @@ internal fun LiquidGlassSurface(
 ) {
     val settings = LocalLiquidGlassSettings.current
     val materialEnabled = enabled && settings.enabledFor(role)
+    val fallbackAlpha = (fallbackColor.alpha * settings.tintAlpha / 35f).coerceIn(0f, 1f)
+    val materialFallback = if (settings.followPaletteTint) {
+        fallbackColor.copy(alpha = fallbackAlpha)
+    } else {
+        Color(
+            red = settings.tintRed / 255f,
+            green = settings.tintGreen / 255f,
+            blue = settings.tintBlue / 255f,
+            alpha = fallbackAlpha,
+        )
+    }
     val paletteTint = if (settings.followPaletteTint) {
         fallbackColor.copy(alpha = settings.tintAlpha / 255f)
     } else {
@@ -282,7 +293,7 @@ internal fun LiquidGlassSurface(
                 update = {
                     it.updateMaterial(
                         radiusPx = settings.blurRadiusPx,
-                        fallbackArgb = fallbackColor.toArgb(),
+                        fallbackArgb = materialFallback.toArgb(),
                         activeTintArgb = paletteTint.toArgb(),
                         requestPassBlur = settings.passBlurEnabled,
                     )
