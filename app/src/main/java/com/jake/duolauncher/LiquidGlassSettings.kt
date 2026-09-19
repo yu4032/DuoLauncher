@@ -16,6 +16,9 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -101,7 +104,7 @@ internal data class LiquidGlassSettings(
 internal class LiquidGlassStore(context: Context) {
     private val prefs = context.getSharedPreferences("liquid_glass", Context.MODE_PRIVATE)
 
-    var state by androidx.compose.runtime.mutableStateOf(load())
+    var state by mutableStateOf(load())
         private set
 
     fun set(value: LiquidGlassSettings) {
