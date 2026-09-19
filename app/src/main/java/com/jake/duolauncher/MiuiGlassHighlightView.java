@@ -23,6 +23,7 @@ final class MiuiGlassHighlightView extends View {
     private final RectF rect = new RectF();
 
     private float cornerRadiusPx = 30f;
+    private float brightness = 1f;
     private float strength = 1f;
     private float reflection = 0.28f;
     private float lighten = 0.16f;
@@ -52,6 +53,7 @@ final class MiuiGlassHighlightView extends View {
 
     void updateMaterial(
             float cornerRadiusPx,
+            float brightness,
             float highlightStrength,
             float reflectionStrength,
             float reflectionLighten,
@@ -70,6 +72,7 @@ final class MiuiGlassHighlightView extends View {
             boolean plainHighlight,
             boolean caustics) {
         this.cornerRadiusPx = Math.max(0f, cornerRadiusPx);
+        this.brightness = clamp(brightness, .5f, 2f);
         this.strength = clamp(highlightStrength, 0f, 2f);
         this.reflection = clamp(reflectionStrength, 0f, 2f);
         this.lighten = clamp(reflectionLighten, 0f, 1f);
@@ -104,6 +107,19 @@ final class MiuiGlassHighlightView extends View {
 
         final int save = canvas.save();
         canvas.clipPath(clipPath);
+
+        if (Math.abs(brightness - 1f) > .001f) {
+            fillPaint.setStyle(Paint.Style.FILL);
+            fillPaint.setShader(null);
+            if (brightness > 1f) {
+                fillPaint.setColor(whiteAlpha(clamp((brightness - 1f) * .14f, 0f, .14f)));
+            } else {
+                fillPaint.setColor(Color.argb(
+                        Math.round(255f * clamp((1f - brightness) * .18f, 0f, .18f)),
+                        0, 0, 0));
+            }
+            canvas.drawRect(rect, fillPaint);
+        }
 
         if (skyHaze) {
             int top = whiteAlpha(clamp(.18f * strength + .05f * lighten, 0f, .34f));
