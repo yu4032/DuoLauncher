@@ -161,7 +161,7 @@ internal fun WidgetProviderPreview(entry: WidgetCatalogEntry, span: WidgetSpan, 
     val preview by produceState<CatalogPreview?>(null, entry.provider, span, context.resources.displayMetrics.densityDpi) {
         value = loadWidgetPreview(context, entry.provider, span)
     }
-    Box(modifier.background(Glass.copy(alpha = .38f)), contentAlignment = Alignment.Center) {
+    Box(modifier.background(liquidGlassTintColor(Glass.copy(alpha = .38f), LiquidGlassRole.WIDGET)), contentAlignment = Alignment.Center) {
         when (val value = preview) {
             is CatalogPreview.Remote -> AndroidView(factory = { previewContext ->
                 object : android.widget.FrameLayout(previewContext) {
